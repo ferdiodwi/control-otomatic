@@ -1,0 +1,6 @@
+names:
+- class_0
+- class_1
+nc: 2
+train: /home/ferdio/Documents/YOLO/dataset/images/train
+val: /home/ferdio/Documents/YOLO/dataset/images/val
