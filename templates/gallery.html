@@ -4,25 +4,42 @@
 
 {% block head %}
 <style>
-    .gallery-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
-    .stat-card { background: var(--surface); backdrop-filter: blur(10px); border: 1px solid var(--border-color); border-radius: var(--border-radius); padding: 1.5rem; text-align: center; }
-    .stat-number { font-size: 2rem; font-weight: 800; background: var(--primary-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
-    .stat-label { font-size: 0.875rem; color: var(--text-muted); text-transform: uppercase; }
+    /* ... (Gaya yang sudah ada tidak saya tampilkan untuk keringkasan) ... */
     .media-grid { display: grid; gap: 1.5rem; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
-    .media-item { background: var(--surface); border: 1px solid var(--border-color); border-radius: var(--border-radius-lg); overflow: hidden; transition: var(--transition); box-shadow: var(--shadow); }
-    .media-item:hover { transform: translateY(-8px) scale(1.02); box-shadow: var(--shadow-xl); border-color: var(--primary-color); }
+    .media-item { position: relative; background: var(--surface); border: 2px solid var(--border-color); border-radius: var(--border-radius-lg); overflow: hidden; transition: var(--transition); box-shadow: var(--shadow); cursor: pointer; }
+    .media-item:hover { transform: translateY(-8px) scale(1.02); box-shadow: var(--shadow-xl); border-color: var(--primary-color-translucent); }
     .media-preview { position: relative; width: 100%; height: 200px; background: var(--dark-gray); }
     .media-preview img, .media-preview video { width: 100%; height: 100%; object-fit: cover; }
-    .media-type-badge { position: absolute; top: 0.75rem; right: 0.75rem; background: rgba(0, 0, 0, 0.8); color: white; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.75rem; font-weight: 600; }
+    .media-type-badge { position: absolute; top: 0.75rem; right: 0.75rem; background: rgba(0, 0, 0, 0.8); color: white; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.75rem; font-weight: 600; z-index: 2; }
     .media-info { padding: 1.5rem; }
-    .media-filename { font-weight: 700; color: var(--text-color); margin-bottom: 0.5rem; }
+    .media-filename { font-weight: 700; color: var(--text-color); margin-bottom: 0.5rem; word-break: break-all; }
     .media-meta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; color: var(--text-muted); font-size: 0.875rem; }
     .media-actions { display: flex; gap: 0.5rem; }
-    #loader { text-align: center; padding: 2rem; font-size: 1.2rem; color: var(--text-muted); width: 100%; grid-column: 1 / -1; }
-    .empty-state { text-align: center; padding: 4rem 2rem; background: var(--surface); border: 2px dashed var(--border-color); border-radius: var(--border-radius-lg); }
+    .empty-state { text-align: center; padding: 4rem 2rem; background: var(--surface); border: 2px dashed var(--border-color); border-radius: var(--border-radius-lg); grid-column: 1 / -1; }
     .empty-state-icon { font-size: 4rem; margin-bottom: 1rem; color: var(--text-muted); }
-    
-    /* === CSS Untuk Modal Dialog === */
+    .loader { text-align: center; padding: 2rem; font-size: 1.2rem; color: var(--text-muted); width: 100%; }
+
+    /* === Gaya untuk Tab & Kontrol === */
+    .gallery-controls { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid var(--border-color); margin-bottom: 1.5rem; }
+    .tabs { display: flex; gap: 0.5rem; }
+    .tab-link { padding: 1rem 1.5rem; cursor: pointer; border: none; background: none; font-size: 1rem; font-weight: 600; color: var(--text-muted); position: relative; border-bottom: 3px solid transparent; transition: var(--transition); transform: translateY(2px); }
+    .tab-link:hover { color: var(--text-color); }
+    .tab-link.active { color: var(--primary-color); border-bottom-color: var(--primary-color); }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* === Gaya untuk Mode Seleksi === */
+    .gallery-action-bar { display: none; align-items: center; gap: 1.5rem; padding: 1rem; background: var(--surface); border: 1px solid var(--border-color); border-radius: var(--border-radius); margin-bottom: 1.5rem; }
+    .selection-mode .gallery-action-bar { display: flex; }
+    .selection-counter { font-weight: 600; color: var(--text-color); }
+    .select-all-label { display: flex; align-items: center; gap: 0.5rem; font-weight: 500; cursor: pointer; }
+    #delete-selected-btn { margin-left: auto; }
+    .media-item-checkbox { display: none; position: absolute; top: 0.75rem; left: 0.75rem; width: 1.5rem; height: 1.5rem; z-index: 3; accent-color: var(--primary-color); }
+    .selection-mode .media-item-checkbox { display: block; }
+    .selection-mode .media-actions { display: none; } /* Sembunyikan tombol individu di mode seleksi */
+    .media-item.selected { border-color: var(--primary-color); box-shadow: 0 0 0 3px var(--primary-color-translucent), var(--shadow-lg); }
+
+    /* === Gaya untuk Modal Dialog === */
     .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.6); backdrop-filter: blur(4px); align-items: center; justify-content: center; }
     .modal.hidden { display: none; }
     .modal:not(.hidden) { display: flex; }
@@ -30,11 +47,14 @@
     .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
     .modal-header h3 { margin: 0; font-weight: 600; }
     .modal-header .modal-title-danger { color: var(--danger-color); }
-    .modal-header .modal-title-success { color: #28a745; } /* Warna hijau untuk sukses */
+    .modal-header .modal-title-success { color: #28a745; }
     .modal-header .modal-title-info { color: var(--text-muted); }
     .close-button { font-size: 1.5rem; background: none; border: none; cursor: pointer; color: var(--text-muted); }
     .modal-actions { display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem; }
-
+    .media-type-badge.annotated {
+        background: var(--primary-color);
+        color: white;
+    }
     @keyframes zoomIn {
         from { transform: scale(0.8); opacity: 0; }
         to { transform: scale(1); opacity: 1; }
@@ -43,12 +63,49 @@
 {% endblock %}
 
 {% block content %}
-<h1 class="page-header">Galeri Media</h1>
-<p class="page-subheader">Koleksi semua gambar dan video yang telah diambil. Kelola media Anda dengan mudah.</p>
+<div id="gallery-container">
+    <h1 class="page-header">Media</h1>
+    <p class="page-subheader">Pusat Manajemen Media: Semua Gambar dan Video Terkumpul dengan Rapi dan Siap Digunakan.</p>
 
-<div class="media-grid" id="media-grid"></div>
+    <div class="gallery-controls">
+        <div class="tabs">
+            <button class="tab-link active" data-tab="images">🖼️ Gambar Mentah</button>
+            <button class="tab-link" data-tab="images_annotated">✨ Gambar AI</button>
+            <button class="tab-link" data-tab="videos">🎬 Video Mentah</button>
+            <button class="tab-link" data-tab="videos_annotated">🎥 Video AI</button>
+        </div>
+        <button id="toggle-selection-btn" class="btn btn-secondary">Pilih</button>
+    </div>
 
-<div id="loader"><p>Memuat media...</p></div>
+    <div class="gallery-action-bar">
+        <label for="select-all-checkbox" class="select-all-label">
+            <input type="checkbox" id="select-all-checkbox">
+            Pilih Semua
+        </label>
+        <span id="selection-counter">0 dipilih</span>
+        <button id="delete-selected-btn" class="btn btn-danger" disabled>Hapus yang Dipilih</button>
+    </div>
+
+    <div id="images-content" class="tab-content active">
+        <div class="media-grid" id="image-grid"></div>
+        <div id="image-loader" class="loader"><p>Memuat gambar mentah...</p></div>
+    </div>
+
+    <div id="images-annotated-content" class="tab-content">
+        <div class="media-grid" id="image-annotated-grid"></div>
+        <div id="image-annotated-loader" class="loader"><p>Memuat gambar AI...</p></div>
+    </div>
+
+    <div id="videos-content" class="tab-content">
+        <div class="media-grid" id="video-grid"></div>
+        <div id="video-loader" class="loader"><p>Memuat video mentah...</p></div>
+    </div>
+
+    <div id="videos-annotated-content" class="tab-content">
+        <div class="media-grid" id="video-annotated-grid"></div>
+        <div id="video-annotated-loader" class="loader"><p>Memuat video AI...</p></div>
+    </div>
+</div>
 
 <div class="modal hidden" id="deleteModal">
     <div class="modal-content-wrapper">
