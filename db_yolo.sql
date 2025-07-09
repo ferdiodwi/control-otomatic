@@ -87,3 +87,26 @@ ALTER TABLE public.annotations OWNER to postgres;
 -- Pesan bahwa skrip telah selesai
 -- (Ini adalah komentar, tidak akan dieksekusi)
 -- Skema database 'db_yolo' berhasil dibuat.
+
+
+-- Tabel untuk menyimpan metadata gambar yang sudah di-anotasi oleh AI
+CREATE TABLE captured_images_annotated (
+    id SERIAL PRIMARY KEY,
+    client_name VARCHAR(255),
+    file_path VARCHAR(512) NOT NULL,
+    created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT (NOW() AT TIME ZONE 'utc'),
+    original_image_id INTEGER REFERENCES captured_images(id) ON DELETE SET NULL
+);
+
+-- Tabel untuk menyimpan metadata video yang sudah di-anotasi oleh AI
+CREATE TABLE recorded_videos_annotated (
+    id SERIAL PRIMARY KEY,
+    client_name VARCHAR(255),
+    file_path VARCHAR(512) NOT NULL,
+    start_time TIMESTAMP WITHOUT TIME ZONE,
+    end_time TIMESTAMP WITHOUT TIME ZONE,
+    duration_seconds INTEGER,
+    file_size_kb INTEGER
+);
+
+ALTER TABLE captured_images ADD COLUMN file_path VARCHAR(255);
