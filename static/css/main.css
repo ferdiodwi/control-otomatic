@@ -1,0 +1,692 @@
+/* static/css/main.css */
+/* =================================
+   RESET & GLOBAL STYLES (TEMA DARK-FRIENDLY)
+   ================================= */
+:root {
+    /* -- PALET WARNA YANG NYAMAN UNTUK MATA -- */
+    --primary-color: #22d3ee; /* Sky 400 - lebih lembut dari teal */
+    --primary-hover: #0ea5e9; /* Sky 500 */
+    --primary-gradient: linear-gradient(135deg, #22d3ee 0%, #06b6d4 100%);
+    
+    /* Warna aksen yang lebih lembut */
+    --secondary-color: #64748b; /* Slate 500 */
+    --secondary-hover: #475569; /* Slate 600 */
+    --success-color: #22c55e; /* Green 500 - lebih lembut */
+    --success-hover: #16a34a; /* Green 600 */
+    --success-gradient: linear-gradient(135deg, #22c55e 0%, #4ade80 100%);
+    --danger-color: #f87171; /* Red 400 - lebih lembut */
+    --danger-hover: #ef4444; /* Red 500 */
+    --danger-gradient: linear-gradient(135deg, #f87171 0%, #fca5a5 100%);
+    --warning-color: #fbbf24; /* Amber 400 */
+    --warning-hover: #f59e0b; /* Amber 500 */
+
+    /* Nuansa Abu-abu untuk Light Mode */
+    --light-gray: #f8fafc;
+    --medium-gray: #e2e8f0;
+    --dark-gray: #1e293b;
+    --text-color: #1e293b;
+    --text-muted: #64748b;
+    --border-color: #e2e8f0;
+    --white: #ffffff;
+    --background: #f8fafc;
+    --surface: rgba(255, 255, 255, 0.9);
+    
+    /* Bayangan & Properti Lainnya */
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    --border-radius: 12px;
+    --border-radius-lg: 16px;
+    --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Dark Mode Variables */
+@media (prefers-color-scheme: dark) {
+    :root {
+        /* Warna yang lebih lembut untuk dark mode */
+        --primary-color: #38bdf8; /* Sky 400 */
+        --primary-hover: #0ea5e9; /* Sky 500 */
+        --primary-gradient: linear-gradient(135deg, #38bdf8 0%, #0ea5e9 100%);
+        
+        --success-color: #4ade80; /* Green 400 */
+        --success-hover: #22c55e; /* Green 500 */
+        --danger-color: #fca5a5; /* Red 300 - lebih lembut untuk dark */
+        --danger-hover: #f87171; /* Red 400 */
+        
+        /* Background dan surface yang nyaman */
+        --background: #0f172a; /* Slate 900 */
+        --surface: rgba(30, 41, 59, 0.8); /* Slate 800 dengan opacity */
+        --light-gray: #1e293b; /* Slate 800 */
+        --medium-gray: #334155; /* Slate 700 */
+        --text-color: #e2e8f0; /* Slate 200 - tidak terlalu putih */
+        --text-muted: #94a3b8; /* Slate 400 */
+        --border-color: #475569; /* Slate 600 - lebih lembut */
+        --white: #0f172a;
+        
+        /* Bayangan untuk dark mode */
+        --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
+        --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -2px rgba(0, 0, 0, 0.3);
+        --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.4);
+    }
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--background);
+    color: var(--text-color);
+    line-height: 1.6;
+    min-height: 100vh;
+    transition: var(--transition);
+}
+
+/* =================================
+   NAVIGATION BAR - DIUBAH UNTUK MENU TENGAH
+   ================================= */
+.navbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--surface);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border-color);
+    box-shadow: var(--shadow);
+    padding: 0 2rem;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.navbar-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 1.5rem;
+    font-weight: 800;
+}
+
+.logo-icon {
+    font-size: 1.8rem;
+}
+
+.nav-links {
+    display: flex;
+    justify-content: center;
+    flex-grow: 1;
+    margin: 0 2rem;
+}
+
+.navbar a {
+    color: var(--text-muted);
+    padding: 1rem 1.5rem;
+    text-decoration: none;
+    text-align: center;
+    font-weight: 600;
+    font-size: 0.95rem;
+    border-bottom: 3px solid transparent;
+    transition: var(--transition);
+    position: relative;
+    overflow: hidden;
+}
+
+.navbar a::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(56, 189, 248, 0.1), transparent);
+    transition: left 0.5s;
+}
+
+.navbar a:hover::before {
+    left: 100%;
+}
+
+.navbar a:hover {
+    color: var(--primary-color);
+    transform: translateY(-2px);
+}
+
+.navbar a.active {
+    color: var(--primary-color);
+    border-bottom-color: var(--primary-color);
+    background: linear-gradient(135deg, rgba(56, 189, 248, 0.1) 0%, rgba(14, 165, 233, 0.05) 100%);
+}
+
+/* =================================
+   MAIN CONTAINER & PAGE HEADER
+   ================================= */
+.container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+.page-header {
+    font-size: 3rem;
+    font-weight: 800;
+    background: var(--primary-gradient);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 0.5rem;
+    animation: fadeInUp 0.8s ease-out;
+}
+
+.page-subheader {
+    font-size: 1.2rem;
+    color: var(--text-muted);
+    margin-bottom: 3rem;
+    font-weight: 400;
+    animation: fadeInUp 0.8s ease-out 0.2s both;
+}
+
+/* =================================
+   ANIMATIONS
+   ================================= */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes slideInRight {
+    from {
+        opacity: 0;
+        transform: translateX(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes pulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.05);
+    }
+}
+
+@keyframes shimmer {
+    0% {
+        background-position: -200px 0;
+    }
+    100% {
+        background-position: calc(200px + 100%) 0;
+    }
+}
+
+/* =================================
+   REUSABLE COMPONENTS
+   ================================= */
+/* --- Cards --- */
+.card {
+    background: var(--surface);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-lg);
+    padding: 2rem;
+    box-shadow: var(--shadow);
+    transition: var(--transition);
+    position: relative;
+    overflow: hidden;
+}
+
+.card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(56, 189, 248, 0.1), transparent);
+    transition: left 0.6s;
+}
+
+.card:hover::before {
+    left: 100%;
+}
+
+.card:hover {
+    transform: translateY(-8px) scale(1.02);
+    box-shadow: var(--shadow-xl);
+    border-color: var(--primary-color);
+}
+
+.card-header {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 1.5rem;
+    color: var(--text-color);
+    padding-bottom: 1rem;
+    border-bottom: 2px solid var(--border-color);
+    position: relative;
+}
+
+.card-header::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    width: 60px;
+    height: 2px;
+    background: var(--primary-gradient);
+    border-radius: 2px;
+}
+
+/* --- Buttons --- */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.75rem 1.5rem;
+    font-size: 1rem;
+    font-weight: 600;
+    text-align: center;
+    text-decoration: none;
+    color: var(--white);
+    border: none;
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    transition: var(--transition);
+    position: relative;
+    overflow: hidden;
+    box-shadow: var(--shadow);
+}
+
+.btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    transition: left 0.6s;
+}
+
+.btn:hover::before {
+    left: 100%;
+}
+
+.btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none !important;
+}
+
+.btn:disabled::before {
+    display: none;
+}
+
+.btn-primary { 
+    background: var(--primary-gradient);
+    color: #0f172a;
+    box-shadow: 0 4px 15px rgba(56, 189, 248, 0.3);
+}
+.btn-primary:hover:not(:disabled) { 
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(56, 189, 248, 0.4);
+}
+
+.btn-success { 
+    background: var(--success-gradient);
+    color: #0f172a;
+    box-shadow: 0 4px 15px rgba(34, 197, 94, 0.3);
+}
+.btn-success:hover:not(:disabled) { 
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(34, 197, 94, 0.4);
+}
+
+.btn-danger { 
+    background: var(--danger-gradient);
+    color: #0f172a;
+    box-shadow: 0 4px 15px rgba(248, 113, 113, 0.3);
+}
+.btn-danger:hover:not(:disabled) { 
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(248, 113, 113, 0.4);
+}
+
+.btn-secondary { 
+    background: linear-gradient(135deg, var(--secondary-color) 0%, #9ca3af 100%);
+    color: var(--text-color);
+    box-shadow: 0 4px 15px rgba(100, 116, 139, 0.3);
+}
+.btn-secondary:hover:not(:disabled) { 
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(100, 116, 139, 0.4);
+}
+
+.btn-sm { 
+    padding: 0.5rem 1rem; 
+    font-size: 0.875rem; 
+}
+
+/* --- Tables --- */
+.table-wrapper {
+    background: var(--surface);
+    backdrop-filter: blur(10px);
+    border-radius: var(--border-radius-lg);
+    box-shadow: var(--shadow-lg);
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+th, td {
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+    text-align: left;
+    vertical-align: middle;
+}
+
+thead th {
+    background: var(--light-gray);
+    font-weight: 700;
+    color: var(--text-color);
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+tbody tr {
+    transition: var(--transition);
+}
+
+tbody tr:last-child td {
+    border-bottom: none;
+}
+
+tbody tr:hover {
+    background: linear-gradient(135deg, rgba(56, 189, 248, 0.05) 0%, rgba(14, 165, 233, 0.03) 100%);
+    transform: scale(1.01);
+}
+
+/* --- Forms & Inputs --- */
+input[type="text"], 
+input[type="number"], 
+input[type="email"],
+input[type="password"],
+select,
+textarea {
+    padding: 0.75rem 1rem;
+    border-radius: var(--border-radius);
+    border: 2px solid var(--border-color);
+    font-size: 1rem;
+    width: 100%;
+    box-sizing: border-box;
+    transition: var(--transition);
+    background: var(--surface);
+    backdrop-filter: blur(5px);
+    color: var(--text-color);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.15);
+    transform: translateY(-1px);
+}
+
+/* =================================
+   DASHBOARD SPECIFIC STYLES
+   ================================= */
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    gap: 2rem;
+    animation: fadeInUp 0.8s ease-out 0.4s both;
+}
+
+.dashboard-grid .card {
+    display: flex;
+    flex-direction: column;
+    min-height: 350px;
+}
+
+.card-title {
+    margin: 0 0 1rem 0;
+    color: var(--primary-color);
+    font-size: 1.25rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.card-title::before {
+    content: '';
+    width: 8px;
+    height: 8px;
+    background: var(--primary-gradient);
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+}
+
+.card-content {
+    flex-grow: 1;
+    color: var(--text-muted);
+    font-size: 1rem;
+    line-height: 1.7;
+}
+
+.stats-container {
+    margin: 1.5rem 0;
+    padding: 1.5rem;
+    background: var(--light-gray);
+    border-radius: var(--border-radius);
+    border: 1px solid var(--border-color);
+}
+
+.stats-main {
+    font-size: 3rem;
+    font-weight: 800;
+    background: var(--primary-gradient);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    line-height: 1;
+    animation: slideInRight 0.8s ease-out;
+}
+
+.stats-label {
+    font-size: 1rem;
+    color: var(--text-muted);
+    font-weight: 600;
+    margin-top: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.card-action {
+    margin-top: auto;
+    padding-top: 1.5rem;
+}
+
+.card-action .btn {
+    width: 100%;
+    font-size: 1.1rem;
+    padding: 1rem;
+}
+
+.model-status {
+    padding: 0.75rem 1rem;
+    border-radius: var(--border-radius);
+    font-weight: 700;
+    display: inline-block;
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+    text-align: center;
+    border: 2px solid;
+    backdrop-filter: blur(5px);
+}
+
+.model-status.ready {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.15) 0%, rgba(74, 222, 128, 0.1) 100%);
+    color: var(--success-color);
+    border-color: var(--success-color);
+}
+
+.model-status.not-ready {
+    background: linear-gradient(135deg, rgba(248, 113, 113, 0.15) 0%, rgba(252, 165, 165, 0.1) 100%);
+    color: var(--danger-color);
+    border-color: var(--danger-color);
+}
+
+/* =================================
+   LOADING STATES
+   ================================= */
+.loading-shimmer {
+    background: linear-gradient(90deg, var(--border-color) 25%, var(--medium-gray) 50%, var(--border-color) 75%);
+    background-size: 200px 100%;
+    animation: shimmer 2s infinite;
+}
+
+/* =================================
+   RESPONSIVE DESIGN
+   ================================= */
+@media (max-width: 1024px) {
+    .nav-links {
+        margin: 0 1rem;
+    }
+    
+    .navbar a {
+        padding: 1rem 1rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .container {
+        padding: 1rem;
+    }
+    
+    .page-header {
+        font-size: 2rem;
+    }
+    
+    .dashboard-grid {
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+    }
+    
+    .navbar {
+        padding: 0 1rem;
+    }
+    
+    .navbar-container {
+        flex-direction: column;
+        padding: 1rem 0;
+    }
+    
+    .logo {
+        margin-bottom: 1rem;
+    }
+    
+    .nav-links {
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: center;
+        margin: 0;
+        width: 100%;
+    }
+    
+    .navbar a {
+        padding: 0.75rem 1rem;
+        font-size: 0.9rem;
+        border-bottom: none;
+    }
+
+    th, td {
+        padding: 0.75rem 1rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .navbar a {
+        padding: 0.5rem;
+        font-size: 0.8rem;
+    }
+    
+    .logo {
+        font-size: 1.2rem;
+    }
+    
+    .logo-icon {
+        font-size: 1.5rem;
+    }
+}
+
+/* =================================
+   IMPROVED ACCESSIBILITY & READABILITY
+   ================================= */
+        
+/* Perbaikan kontras untuk teks */
+@media (prefers-color-scheme: dark) {
+    .btn-primary,
+    .btn-success,
+    .btn-danger {
+        color: #0f172a;
+        font-weight: 700;
+    }
+    
+    .btn-secondary {
+        color: #e2e8f0;
+    }
+    
+    /* Perbaikan untuk form elements */
+    ::placeholder {
+        color: var(--text-muted);
+        opacity: 0.7;
+    }
+}
+
+/* Light mode improvements */
+@media (prefers-color-scheme: light) {
+    .btn-primary,
+    .btn-success,
+    .btn-danger {
+        color: #ffffff;
+        font-weight: 600;
+    }
+}
+
+/* Smooth transitions untuk tema switching */
+* {
+    transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}
