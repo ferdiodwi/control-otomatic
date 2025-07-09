@@ -8,7 +8,6 @@
 
 Sistem aplikasi web komprehensif yang dirancang untuk menerima stream video, melakukan deteksi objek secara real-time menggunakan model YOLO, dan mengelola semua aset media yang dihasilkan melalui antarmuka yang intuitif.
 
-![App Demo GIF](https://via.placeholder.com/800x450.png?text=Ganti+dengan+GIF+Demo+Aplikasi+Anda)
 
 ---
 
