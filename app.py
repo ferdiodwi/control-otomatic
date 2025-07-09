@@ -23,22 +23,37 @@ from datetime import datetime
 # --- KONFIGURASI ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 app = Flask(__name__)
-RECORDINGS_DIR = "recordings"
-if not os.path.exists(RECORDINGS_DIR):
-    os.makedirs(RECORDINGS_DIR)
 
-# [MODIFIKASI] Menambahkan konfigurasi untuk video
-DB_CONFIG = {"dbname": "db_yolo", "user": "postgres", "password": "123", "host": "localhost", "port": "5432"}
+# --- Direktori untuk media mentah ---
+IMAGES_DIR = "images"
+RECORDINGS_DIR = "recordings"
+
+# --- Direktori untuk media yang telah diproses AI ---
+IMAGES_ANNOTATED_DIR = "images_annotated"
+RECORDINGS_ANNOTATED_DIR = "recordings_annotated"
+
+# --- Pembuatan Direktori ---
+for directory in [IMAGES_DIR, RECORDINGS_DIR, IMAGES_ANNOTATED_DIR, RECORDINGS_ANNOTATED_DIR]:
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+
+# --- Konfigurasi Lainnya ---
+DB_CONFIG = {"dbname": "db_yolo", "user": "postgres", "password": "040303", "host": "localhost", "port": "5433"}
 DATASET_EXPORT_PATH = "dataset"
 TRAINED_MODEL_PATH = "runs/train/exp/weights/best.pt"
-IMAGE_SAVE_INTERVAL_SECONDS = 5  # Simpan gambar setiap 5 detik
-VIDEO_RECORD_DURATION_MINUTES = 1  # Simpan video per segmen 1 menit
+IMAGE_SAVE_INTERVAL_SECONDS = 1
+VIDEO_RECORD_DURATION_MINUTES = 1
+
+# --- Konfigurasi untuk penyimpanan media yang diannotasi ---
+ANNOTATED_IMAGE_SAVE_INTERVAL_SECONDS = 2
+ANNOTATED_VIDEO_RECORD_DURATION_MINUTES = 1
 
 db_pool = ThreadedConnectionPool(minconn=1, maxconn=10, **DB_CONFIG)
 
 latest_frame_data = {
     "frame": None,
-    "lock": threading.Lock()
+    "lock": threading.Lock(),
+    "client_name": "unknown_client"
 }
 training_log_queue = queue.Queue()
 
@@ -55,67 +70,98 @@ def release_db_connection(conn):
 
 # --- FUNGSI DATABASE & HELPER ---
 
-def save_image_to_db(conn, client_name, image_frame):
-    """Menyimpan satu frame gambar beserta thumbnail-nya ke database."""
-    _, jpg_buffer = cv2.imencode('.jpg', image_frame)
-    h, w, _ = image_frame.shape
-    aspect_ratio = h / w
-    THUMBNAIL_WIDTH = 250
-    new_height = int(THUMBNAIL_WIDTH * aspect_ratio)
-    thumbnail_frame = cv2.resize(image_frame, (THUMBNAIL_WIDTH, new_height), interpolation=cv2.INTER_AREA)
-    _, jpg_buffer_thumbnail = cv2.imencode('.jpg', thumbnail_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+def save_image(conn, client_name, image_frame):
+    """
+    Menyimpan frame gambar mentah ke folder DAN sebagai data biner ke database.
+    """
     try:
+        now = datetime.now()
+        _, jpg_buffer = cv2.imencode('.jpg', image_frame)
+        h, w, _ = image_frame.shape
+        aspect_ratio = h / w
+        THUMBNAIL_WIDTH = 250
+        new_height = int(THUMBNAIL_WIDTH * aspect_ratio)
+        thumbnail_frame = cv2.resize(image_frame, (THUMBNAIL_WIDTH, new_height), interpolation=cv2.INTER_AREA)
+        _, jpg_buffer_thumbnail = cv2.imencode('.jpg', thumbnail_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+
+        timestamp_str = now.strftime("%Y%m%d_%H%M%S_%f")
+        image_filename = f"{client_name}_{timestamp_str}.jpg"
+        image_filepath = os.path.join(IMAGES_DIR, image_filename)
+        cv2.imwrite(image_filepath, image_frame)
+
         with conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO captured_images (client_name, image_data, thumbnail_data, created_at) VALUES (%s, %s, %s, %s)",
-                (client_name, psycopg2.Binary(jpg_buffer), psycopg2.Binary(jpg_buffer_thumbnail), datetime.now())
+                """
+                INSERT INTO captured_images (client_name, image_data, thumbnail_data, created_at, file_path)
+                VALUES (%s, %s, %s, %s, %s) RETURNING id
+                """,
+                (client_name, psycopg2.Binary(jpg_buffer), psycopg2.Binary(jpg_buffer_thumbnail), now, image_filepath)
             )
+            image_id = cur.fetchone()[0]
         conn.commit()
-        logging.info(f"Successfully saved image and thumbnail from {client_name} to DB.")
+        logging.info(f"Successfully saved raw image to {image_filepath} and as binary data to DB (ID: {image_id}).")
+        return image_id
     except Exception as e:
         conn.rollback()
-        logging.error(f"Failed to save image to DB: {e}")
+        logging.error(f"Failed to save raw image with hybrid model: {e}")
+        return None
 
+def save_annotated_image(conn, client_name, annotated_frame, original_image_id):
+    """
+    Menyimpan frame yang sudah di-anotasi oleh AI sebagai file fisik dan menyimpan metadatanya.
+    """
+    try:
+        now = datetime.now()
+        timestamp_str = now.strftime("%Y%m%d_%H%M%S_%f")
+        image_filename = f"{client_name}_annotated_{timestamp_str}.jpg"
+        image_filepath = os.path.join(IMAGES_ANNOTATED_DIR, image_filename)
+        cv2.imwrite(image_filepath, annotated_frame)
 
-# [BARU] Fungsi untuk menyimpan metadata video, diadaptasi dari server.py
-def save_video_metadata_to_db(conn, client_name, file_path, start_time, end_time):
-    """Menyimpan metadata video ke tabel recorded_videos."""
-    # Pastikan tabel 'recorded_videos' ada di database Anda
-    # CREATE TABLE recorded_videos (
-    #     id SERIAL PRIMARY KEY,
-    #     client_name VARCHAR(255),
-    #     file_path VARCHAR(255) NOT NULL,
-    #     start_time TIMESTAMP WITHOUT TIME ZONE,
-    #     end_time TIMESTAMP WITHOUT TIME ZONE,
-    #     duration_seconds INTEGER,
-    #     file_size_kb INTEGER,
-    #     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    # );
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO captured_images_annotated (client_name, file_path, created_at, original_image_id)
+                VALUES (%s, %s, %s, %s)
+                """,
+                (client_name, image_filepath, now, original_image_id)
+            )
+        conn.commit()
+        logging.info(f"Successfully saved annotated image to {image_filepath}.")
+    except Exception as e:
+        conn.rollback()
+        logging.error(f"Failed to save annotated image to DB: {e}")
+
+def save_video_metadata_to_db(conn, client_name, file_path, start_time, end_time, table="recorded_videos"):
+    """
+    Menyimpan metadata video ke tabel yang ditentukan (bisa untuk video mentah atau beranotasi).
+    """
     if not os.path.exists(file_path):
         logging.warning(f"File video tidak ditemukan di path: {file_path}, metadata tidak disimpan.")
         return
 
     duration = (end_time - start_time).total_seconds()
-    file_size = os.path.getsize(file_path) / 1024  # dalam KB
+    file_size = os.path.getsize(file_path) / 1024
     try:
         with conn.cursor() as cur:
+            # Validasi nama tabel untuk keamanan
+            if table not in ["recorded_videos", "recorded_videos_annotated"]:
+                raise ValueError("Invalid table name for saving video metadata")
+
             cur.execute(
-                """
-                INSERT INTO recorded_videos (client_name, file_path, start_time, end_time, duration_seconds,
-                                             file_size_kb)
+                f"""
+                INSERT INTO {table} (client_name, file_path, start_time, end_time, duration_seconds, file_size_kb)
                 VALUES (%s, %s, %s, %s, %s, %s)
                 """,
                 (client_name, file_path, start_time, end_time, int(duration), int(file_size))
             )
         conn.commit()
-        logging.info(f"Successfully saved video metadata for {file_path} to DB.")
+        logging.info(f"Successfully saved video metadata for {file_path} to table '{table}'.")
     except Exception as e:
         conn.rollback()
-        logging.error(f"Failed to save video metadata to DB: {e}")
+        logging.error(f"Failed to save video metadata to DB table '{table}': {e}")
 
 
 def export_data_for_yolo():
-    # Implementasi fungsi ini tetap sama
     conn = None
     try:
         if os.path.exists(DATASET_EXPORT_PATH):
@@ -128,41 +174,60 @@ def export_data_for_yolo():
         os.makedirs(train_lbl_path);
         os.makedirs(val_img_path);
         os.makedirs(val_lbl_path)
+
         conn = get_db_connection()
         with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute(
-                "SELECT DISTINCT i.id, i.image_data FROM captured_images i JOIN annotations a ON i.id = a.image_id")
+                "SELECT DISTINCT i.id, i.file_path FROM captured_images i JOIN annotations a ON i.id = a.image_id WHERE i.file_path IS NOT NULL")
             images = cur.fetchall()
-            if not images: return False, "Tidak ada gambar beranotasi yang ditemukan untuk diekspor."
+            if not images: return False, "Tidak ada gambar beranotasi (dengan file_path) yang ditemukan untuk diekspor."
+
             cur.execute("SELECT image_id, class_id, bbox_x, bbox_y, bbox_width, bbox_height FROM annotations")
             all_annotations = cur.fetchall()
+
         annotations_by_image = {}
         for ann in all_annotations:
             if ann['image_id'] not in annotations_by_image: annotations_by_image[ann['image_id']] = []
             annotations_by_image[ann['image_id']].append(ann)
-        class_names, image_files_to_write = set(), []
+
+        class_names = set()
+        image_files_to_process = []
         for img_row in images:
-            img_id, img_data = img_row['id'], img_row['image_data']
-            nparr = cv2.imdecode(np.frombuffer(img_data, np.uint8), cv2.IMREAD_COLOR)
+            img_id, file_path = img_row['id'], img_row['file_path']
+            if not os.path.exists(file_path):
+                logging.warning(f"File gambar {file_path} untuk ID {img_id} tidak ditemukan. Dilewati.")
+                continue
+
+            nparr = cv2.imread(file_path)
+            if nparr is None:
+                logging.warning(f"Gagal membaca file gambar {file_path}. Dilewati.")
+                continue
+
             img_h, img_w, _ = nparr.shape
             label_lines = []
             if img_id in annotations_by_image:
                 for row in annotations_by_image[img_id]:
-                    x_center, y_center = (row['bbox_x'] + row['bbox_width'] / 2) / img_w, (
-                                row['bbox_y'] + row['bbox_height'] / 2) / img_h
-                    width, height = row['bbox_width'] / img_w, row['bbox_height'] / img_h
+                    x_center = (row['bbox_x'] + row['bbox_width'] / 2) / img_w
+                    y_center = (row['bbox_y'] + row['bbox_height'] / 2) / img_h
+                    width = row['bbox_width'] / img_w
+                    height = row['bbox_height'] / img_h
                     class_id = int(row['class_id'])
                     class_names.add(f"class_{class_id}")
                     label_lines.append(f"{class_id} {x_center:.6f} {y_center:.6f} {width:.6f} {height:.6f}")
-            image_files_to_write.append({'id': img_id, 'image_data': img_data, 'labels': label_lines})
-        split_index = int(len(image_files_to_write) * 0.8)
-        train_data, val_data = image_files_to_write[:split_index], image_files_to_write[split_index:]
+
+            image_files_to_process.append({'id': img_id, 'file_path': file_path, 'labels': label_lines})
+
+        split_index = int(len(image_files_to_process) * 0.8)
+        train_data, val_data = image_files_to_process[:split_index], image_files_to_process[split_index:]
+
         for data in train_data:
-            with open(os.path.join(train_img_path, f"{data['id']}.jpg"), 'wb') as f: f.write(data['image_data'])
+            shutil.copy(data['file_path'], os.path.join(train_img_path, f"{data['id']}.jpg"))
             with open(os.path.join(train_lbl_path, f"{data['id']}.txt"), 'w') as f: f.write("\n".join(data['labels']))
+
         for data in val_data:
-            with open(os.path.join(val_img_path, f"{data['id']}.jpg"), 'wb') as f: f.write(data['image_data'])
+            shutil.copy(data['file_path'], os.path.join(val_img_path, f"{data['id']}.jpg"))
             with open(os.path.join(val_lbl_path, f"{data['id']}.txt"), 'w') as f: f.write("\n".join(data['labels']))
+
         if not class_names: return False, "Tidak ada kelas anotasi yang ditemukan."
         sorted_class_names = sorted(list(class_names), key=lambda name: int(name.split('_')[1]))
         yaml_content = {'train': os.path.abspath(train_img_path), 'val': os.path.abspath(val_img_path),
@@ -178,86 +243,70 @@ def export_data_for_yolo():
         if conn: release_db_connection(conn)
 
 
-# [MODIFIKASI] Thread utama untuk menerima gambar dan merekam video
 def image_receiver_thread():
+    """
+    Thread ini HANYA bertanggung jawab menerima frame dari client,
+    menyimpannya sebagai media mentah (raw), dan meletakkannya di 'latest_frame_data'
+    untuk diproses oleh thread lain.
+    """
     logging.info("Image receiver thread started, waiting for client...")
     db_conn = get_db_connection()
-
-    # Konfigurasi ZMQ Receiver
     receiver = imagezmq.ImageHub()
-    receive_timeout_ms = 2000  # Timeout 2 detik untuk deteksi disconnect
+    receive_timeout_ms = 2000
     receiver.zmq_socket.setsockopt(zmq.RCVTIMEO, receive_timeout_ms)
 
-    # State untuk penyimpanan
     last_image_save_time = time.time()
-    video_writer_states = {}  # { 'client_name': {'writer': obj, 'start_time': dt, 'path': '...'}}
+    video_writer_states = {} # Untuk video mentah
 
     try:
         while True:
-            client_name = None
+            client_name_recv = "unknown_client"
             try:
-                client_name, frame = receiver.recv_image()
+                client_name_recv, frame = receiver.recv_image()
                 receiver.send_reply(b'OK')
 
-                if frame is None:
-                    continue
+                if frame is None: continue
 
-                # Perbarui frame global untuk live feed
                 with latest_frame_data["lock"]:
                     latest_frame_data["frame"] = frame.copy()
+                    latest_frame_data["client_name"] = client_name_recv
 
                 now_datetime = datetime.now()
                 current_time = time.time()
+                client_state = video_writer_states.get(client_name_recv)
 
-                # --- Logika Perekaman Video ---
-                client_state = video_writer_states.get(client_name)
-
-                # Jika belum ada video writer untuk client ini, buat baru
                 if not client_state:
                     video_start_time = now_datetime
                     timestamp_str = video_start_time.strftime("%Y%m%d_%H%M%S")
-                    video_filename = os.path.join(RECORDINGS_DIR, f"{client_name}_{timestamp_str}.mp4")
-                    fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Codec .mp4
+                    video_filename = os.path.join(RECORDINGS_DIR, f"{client_name_recv}_{timestamp_str}.mp4")
+                    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
                     height, width, _ = frame.shape
                     writer = cv2.VideoWriter(video_filename, fourcc, 20.0, (width, height))
+                    video_writer_states[client_name_recv] = {'writer': writer, 'start_time': video_start_time, 'path': video_filename}
+                    logging.info(f"Starting new RAW video recording for {client_name_recv}: {video_filename}")
 
-                    video_writer_states[client_name] = {
-                        'writer': writer,
-                        'start_time': video_start_time,
-                        'path': video_filename
-                    }
-                    logging.info(f"Starting new video recording for {client_name}: {video_filename}")
+                video_writer_states[client_name_recv]['writer'].write(frame)
 
-                # Tulis frame ke file video
-                video_writer_states[client_name]['writer'].write(frame)
-
-                # Cek apakah durasi perekaman sudah tercapai
-                start_time = video_writer_states[client_name]['start_time']
+                start_time = video_writer_states[client_name_recv]['start_time']
                 if (now_datetime - start_time).total_seconds() >= VIDEO_RECORD_DURATION_MINUTES * 60:
-                    logging.info(
-                        f"Completing video segment for {client_name}: {video_writer_states[client_name]['path']}")
-                    # Finalisasi video
-                    video_writer_states[client_name]['writer'].release()
-                    # Simpan metadata ke DB
-                    save_video_metadata_to_db(db_conn, client_name, video_writer_states[client_name]['path'],
-                                              start_time, now_datetime)
-                    # Hapus state untuk memulai yang baru di iterasi berikutnya
-                    video_writer_states.pop(client_name, None)
+                    logging.info(f"Completing RAW video segment for {client_name_recv}: {video_writer_states[client_name_recv]['path']}")
+                    video_writer_states[client_name_recv]['writer'].release()
+                    save_video_metadata_to_db(db_conn, client_name_recv, video_writer_states[client_name_recv]['path'], start_time, now_datetime, table="recorded_videos")
+                    video_writer_states.pop(client_name_recv, None)
 
-                # --- Logika Penyimpanan Gambar (Snapshot) ---
                 if current_time - last_image_save_time >= IMAGE_SAVE_INTERVAL_SECONDS:
-                    save_image_to_db(db_conn, client_name, frame)
+                    save_image(db_conn, client_name_recv, frame)
                     last_image_save_time = current_time
 
             except zmq.error.Again:
                 logging.info("Waiting for new client connection...")
-                # Jika client timeout/disconnect, finalisasi video yang sedang berjalan
-                if client_name and client_name in video_writer_states:
-                    logging.warning(
-                        f"Client '{client_name}' disconnected. Closing video file: {video_writer_states[client_name]['path']}")
-                    state = video_writer_states.pop(client_name)
+                if client_name_recv and client_name_recv in video_writer_states:
+                    logging.warning(f"Client '{client_name_recv}' disconnected. Closing RAW video file: {video_writer_states[client_name_recv]['path']}")
+                    state = video_writer_states.pop(client_name_recv)
                     state['writer'].release()
-                    save_video_metadata_to_db(db_conn, client_name, state['path'], state['start_time'], datetime.now())
+                    save_video_metadata_to_db(db_conn, client_name_recv, state['path'], state['start_time'], datetime.now(), table="recorded_videos")
+                with latest_frame_data["lock"]:
+                    latest_frame_data["frame"] = None
                 time.sleep(1)
                 continue
 
@@ -266,26 +315,94 @@ def image_receiver_thread():
                 time.sleep(2)
 
     finally:
-        # Cleanup terakhir sebelum thread berhenti
-        logging.info("Image receiver thread shutting down. Finalizing all recordings...")
+        logging.info("Image receiver thread shutting down. Finalizing all RAW recordings...")
         for client, state in video_writer_states.items():
             state['writer'].release()
-            logging.info(f"Finalized recording for {client}: {state['path']}")
-            save_video_metadata_to_db(db_conn, client, state['path'], state['start_time'], datetime.now())
-
+            logging.info(f"Finalized RAW recording for {client}: {state['path']}")
+            save_video_metadata_to_db(db_conn, client, state['path'], state['start_time'], datetime.now(), table="recorded_videos")
         release_db_connection(db_conn)
-        logging.info("Database connection released.")
+        logging.info("Database connection for raw media released.")
+
+
+def annotated_frame_processor_thread():
+    """
+    Thread ini mengambil frame terbaru, menjalankan model AI, dan menyimpan hasilnya.
+    """
+    logging.info("Annotated frame processor thread started.")
+    db_conn = get_db_connection()
+    model = YOLO(TRAINED_MODEL_PATH) if os.path.exists(TRAINED_MODEL_PATH) else None
+    if not model:
+        logging.warning("Annotated processor: Model not found. This thread will not save annotated media.")
+
+    video_writer = None
+    video_start_time = None
+    video_path = None
+    last_annotated_image_save_time = time.time()
+
+    try:
+        while True:
+            frame_copy = None
+            client_name = "unknown_client"
+
+            with latest_frame_data["lock"]:
+                if latest_frame_data["frame"] is not None:
+                    frame_copy = latest_frame_data["frame"].copy()
+                    client_name = latest_frame_data["client_name"]
+
+            if frame_copy is None:
+                if video_writer:
+                    logging.info(f"No active frame. Completing ANNOTATED video segment: {video_path}")
+                    video_writer.release()
+                    save_video_metadata_to_db(db_conn, client_name, video_path, video_start_time, datetime.now(), table="recorded_videos_annotated")
+                    video_writer = None
+                time.sleep(1)
+                continue
+
+            if not model:
+                time.sleep(2)
+                continue
+
+            annotated_frame = model(frame_copy, verbose=False)[0].plot()
+            now_datetime = datetime.now()
+            current_time = time.time()
+
+            if video_writer is None:
+                video_start_time = now_datetime
+                timestamp_str = video_start_time.strftime("%Y%m%d_%H%M%S")
+                video_path = os.path.join(RECORDINGS_ANNOTATED_DIR, f"{client_name}_annotated_{timestamp_str}.mp4")
+                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                height, width, _ = annotated_frame.shape
+                video_writer = cv2.VideoWriter(video_path, fourcc, 20.0, (width, height))
+                logging.info(f"Starting new ANNOTATED video recording for {client_name}: {video_path}")
+
+            video_writer.write(annotated_frame)
+
+            if (now_datetime - video_start_time).total_seconds() >= ANNOTATED_VIDEO_RECORD_DURATION_MINUTES * 60:
+                logging.info(f"Completing ANNOTATED video segment for {client_name}: {video_path}")
+                video_writer.release()
+                save_video_metadata_to_db(db_conn, client_name, video_path, video_start_time, now_datetime, table="recorded_videos_annotated")
+                video_writer = None
+
+            if current_time - last_annotated_image_save_time >= ANNOTATED_IMAGE_SAVE_INTERVAL_SECONDS:
+                save_annotated_image(db_conn, client_name, annotated_frame, original_image_id=None)
+                last_annotated_image_save_time = current_time
+
+    finally:
+        logging.info("Annotated processor thread shutting down. Finalizing any active recording...")
+        if video_writer:
+            video_writer.release()
+            logging.info(f"Finalized annotated recording: {video_path}")
+            save_video_metadata_to_db(db_conn, client_name, video_path, video_start_time, datetime.now(), table="recorded_videos_annotated")
+        release_db_connection(db_conn)
+        logging.info("Database connection for annotated media released.")
 
 
 # --- RUTE-RUTE HALAMAN ---
-
 @app.route('/')
 def home():
     conn = None
-    stats = {
-        'total_images': 0, 'total_videos': 0, 'annotated_images': 0,
-        'unannotated_images': 0, 'model_exists': False, 'progress': 0.0
-    }
+    stats = {'total_images': 0, 'total_videos': 0, 'annotated_images': 0, 'unannotated_images': 0,
+             'model_exists': False, 'progress': 0.0}
     try:
         conn = get_db_connection()
         with conn.cursor() as cur:
@@ -296,14 +413,12 @@ def home():
                         """)
             result = cur.fetchone()
             total_images, total_videos, annotated_images = result
-
-            stats['total_images'] = total_images
-            stats['total_videos'] = total_videos
-            stats['annotated_images'] = annotated_images
-            stats['unannotated_images'] = total_images - annotated_images
+            stats.update({
+                'total_images': total_images, 'total_videos': total_videos, 'annotated_images': annotated_images,
+                'unannotated_images': total_images - annotated_images
+            })
             if total_images > 0:
                 stats['progress'] = round((annotated_images / total_images) * 100, 1)
-
         stats['model_exists'] = os.path.exists(TRAINED_MODEL_PATH)
         return render_template('home.html', stats=stats)
     except Exception as e:
@@ -314,23 +429,19 @@ def home():
 
 
 @app.route('/gallery')
-def gallery():
-    return render_template('gallery.html')
+def gallery(): return render_template('gallery.html')
 
 
 @app.route('/data_anotasi')
-def data_cleaning_page():
-    return render_template('data_cleaning.html')
+def data_cleaning_page(): return render_template('data_cleaning.html')
 
 
 @app.route('/train')
-def train_page():
-    return render_template('train.html')
+def train_page(): return render_template('train.html')
 
 
 @app.route('/live_inference')
-def live_inference_page():
-    return render_template('inference.html')
+def live_inference_page(): return render_template('inference.html')
 
 
 @app.route('/annotate/<int:image_id>')
@@ -340,24 +451,30 @@ def annotate(image_id):
     try:
         conn = get_db_connection()
         with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            cur.execute("SELECT id FROM captured_images WHERE id = %s", (image_id,))
+            cur.execute("SELECT id, file_path FROM captured_images WHERE id = %s", (image_id,))
             image_info = cur.fetchone()
             if not image_info: return "Image not found", 404
 
-            cur.execute("SELECT image_data FROM captured_images WHERE id = %s", (image_id,))
-            image_data = cur.fetchone()['image_data']
+            image_path = image_info['file_path']
+            if not image_path or not os.path.exists(image_path):
+                cur.execute("SELECT image_data FROM captured_images WHERE id = %s", (image_id,))
+                img_data_row = cur.fetchone()
+                if not img_data_row or not img_data_row['image_data']:
+                    return "Image file and image data not found", 404
+                image_data = img_data_row['image_data']
+            else:
+                with open(image_path, "rb") as f:
+                    image_data = f.read()
 
             cur.execute("SELECT * FROM annotations WHERE image_id = %s ORDER BY id", (image_id,))
             annotations = [dict(row) for row in cur.fetchall()]
 
-            nav_ids = []
-            if context == 'annotated':
-                cur.execute("SELECT DISTINCT image_id AS id FROM annotations ORDER BY image_id ASC")
-                nav_ids = [row['id'] for row in cur.fetchall()]
-            else:
-                cur.execute(
-                    "SELECT id FROM captured_images WHERE NOT EXISTS (SELECT 1 FROM annotations WHERE image_id = captured_images.id) ORDER BY id ASC")
-                nav_ids = [row['id'] for row in cur.fetchall()]
+            nav_ids_query_map = {
+                'annotated': "SELECT DISTINCT image_id AS id FROM annotations ORDER BY image_id ASC",
+                'unannotated': "SELECT id FROM captured_images WHERE NOT EXISTS (SELECT 1 FROM annotations WHERE image_id = captured_images.id) ORDER BY id ASC"
+            }
+            cur.execute(nav_ids_query_map.get(context, nav_ids_query_map['unannotated']))
+            nav_ids = [row['id'] for row in cur.fetchall()]
 
             prev_id, next_id = None, None
             try:
@@ -380,9 +497,7 @@ def annotate(image_id):
 
 
 # --- ENDPOINT API ---
-
 def process_media_rows(rows):
-    """Helper to convert media data and encode thumbnails."""
     results = []
     for row in rows:
         item = dict(row)
@@ -390,71 +505,120 @@ def process_media_rows(rows):
             item['thumbnail_b64'] = base64.b64encode(item['thumbnail_data']).decode('utf-8')
         else:
             item['thumbnail_b64'] = None
+        if item.get('timestamp'):
+            item['timestamp_str'] = item['timestamp'].strftime('%d %b %Y, %H:%M:%S')
+        if item.get('filename'):
+            item['filename'] = os.path.basename(item['filename'])
         item.pop('thumbnail_data', None)
         item.pop('image_data', None)
         results.append(item)
     return results
 
 
-# [MODIFIKASI] API untuk galeri sekarang juga mengambil thumbnail video jika ada
-@app.route('/api/gallery_media')
-def get_gallery_media():
+@app.route('/api/gallery_images')
+def get_gallery_images():
     page = request.args.get('page', 1, type=int)
     per_page = 20
     offset = (page - 1) * per_page
-
     conn = None
     try:
         conn = get_db_connection()
         with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            # Query ini menggabungkan gambar dan video, diurutkan berdasarkan waktu pembuatan
-            # dan memastikan ada kolom 'filename' yang konsisten.
             query = """
-                (SELECT 
-                    'image' as type, 
-                    id, 
-                    client_name, 
-                    thumbnail_data, 
-                    created_at as timestamp, 
-                    'img_' || id || '_' || to_char(created_at, 'YYYYMMDD') || '.jpg' as filename
-                FROM captured_images)
-                UNION ALL
-                (SELECT 
-                    'video' as type, 
-                    id, 
-                    client_name, 
-                    NULL as thumbnail_data, 
-                    start_time as timestamp,
+                SELECT
+                    'image' as type, id, client_name, thumbnail_data, created_at as timestamp,
                     file_path as filename
-                FROM recorded_videos)
+                FROM captured_images
                 ORDER BY timestamp DESC
                 LIMIT %s OFFSET %s;
             """
             cur.execute(query, (per_page, offset))
-            raw_media = cur.fetchall()
-
-            media_items = []
-            for row in raw_media:
-                item = dict(row)
-                if item.get('timestamp'):
-                    item['timestamp_str'] = item['timestamp'].strftime('%d %b %Y, %H:%M:%S')
-
-                if item['type'] == 'image' and item.get('thumbnail_data'):
-                    item['thumbnail_b64'] = base64.b64encode(item['thumbnail_data']).decode('utf-8')
-                else:
-                    item['thumbnail_b64'] = None
-
-                    # Untuk video, nama file mungkin berisi path, kita hanya butuh nama filenya saja.
-                if item['type'] == 'video' and item.get('filename'):
-                    item['filename'] = os.path.basename(item['filename'])
-
-                # Menghapus data biner besar dari payload JSON
-                item.pop('thumbnail_data', None)
-                media_items.append(item)
-
-        return jsonify(media_items)
+            media = process_media_rows(cur.fetchall())
+        return jsonify(media)
     except Exception as e:
-        logging.error(f"Error fetching gallery media: {e}", exc_info=True)
+        logging.error(f"Error fetching gallery images: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn: release_db_connection(conn)
+
+
+@app.route('/api/gallery_videos')
+def get_gallery_videos():
+    page = request.args.get('page', 1, type=int)
+    per_page = 20
+    offset = (page - 1) * per_page
+    conn = None
+    try:
+        conn = get_db_connection()
+        with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+            query = """
+                SELECT
+                    'video' as type, id, client_name, NULL as thumbnail_data, start_time as timestamp,
+                    file_path as filename
+                FROM recorded_videos
+                ORDER BY timestamp DESC
+                LIMIT %s OFFSET %s;
+            """
+            cur.execute(query, (per_page, offset))
+            media = process_media_rows(cur.fetchall())
+        return jsonify(media)
+    except Exception as e:
+        logging.error(f"Error fetching gallery videos: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn: release_db_connection(conn)
+
+
+@app.route('/api/gallery_images_annotated')
+def get_gallery_images_annotated():
+    page = request.args.get('page', 1, type=int)
+    per_page = 20
+    offset = (page - 1) * per_page
+    conn = None
+    try:
+        conn = get_db_connection()
+        with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+            query = """
+                SELECT 
+                    'image_annotated' as type, id, client_name, NULL as thumbnail_data, created_at as timestamp, 
+                    file_path as filename
+                FROM captured_images_annotated
+                ORDER BY timestamp DESC
+                LIMIT %s OFFSET %s;
+            """
+            cur.execute(query, (per_page, offset))
+            media = process_media_rows(cur.fetchall())
+        return jsonify(media)
+    except Exception as e:
+        logging.error(f"Error fetching annotated gallery images: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn: release_db_connection(conn)
+
+# [PENAMBAHAN] Endpoint baru untuk mengambil video AI
+@app.route('/api/gallery_videos_annotated')
+def get_gallery_videos_annotated():
+    """Endpoint untuk mengambil daftar video yang sudah diproses AI."""
+    page = request.args.get('page', 1, type=int)
+    per_page = 20
+    offset = (page - 1) * per_page
+    conn = None
+    try:
+        conn = get_db_connection()
+        with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+            query = """
+                SELECT
+                    'video_annotated' as type, id, client_name, NULL as thumbnail_data, start_time as timestamp,
+                    file_path as filename
+                FROM recorded_videos_annotated
+                ORDER BY timestamp DESC
+                LIMIT %s OFFSET %s;
+            """
+            cur.execute(query, (per_page, offset))
+            media = process_media_rows(cur.fetchall())
+        return jsonify(media)
+    except Exception as e:
+        logging.error(f"Error fetching annotated gallery videos: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
     finally:
         if conn: release_db_connection(conn)
@@ -467,34 +631,17 @@ def get_data_by_status():
     page = request.args.get('page', 1, type=int)
     per_page = 25
     offset = (page - 1) * per_page
-
-    if sort_order.lower() not in ['asc', 'desc']:
-        sort_order = 'desc'
+    if sort_order.lower() not in ['asc', 'desc']: sort_order = 'desc'
 
     conn = None
     try:
         conn = get_db_connection()
         with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+            base_query = "SELECT id, created_at, thumbnail_data, 'image' as type FROM captured_images i"
             if status == 'unannotated':
-                query = f"""
-                    SELECT id, created_at, thumbnail_data 
-                    FROM captured_images i
-                    WHERE NOT EXISTS (
-                        SELECT 1 FROM annotations a WHERE a.image_id = i.id
-                    )
-                    ORDER BY i.created_at {sort_order.upper()}
-                    LIMIT %s OFFSET %s;
-                """
-            else:  # annotated
-                query = f"""
-                    SELECT i.id, i.created_at, i.thumbnail_data
-                    FROM captured_images i
-                    WHERE EXISTS (
-                        SELECT 1 FROM annotations a WHERE a.image_id = i.id
-                    )
-                    ORDER BY i.created_at {sort_order.upper()}
-                    LIMIT %s OFFSET %s;
-                """
+                query = f"{base_query} WHERE NOT EXISTS (SELECT 1 FROM annotations a WHERE a.image_id = i.id) ORDER BY i.created_at {sort_order.upper()} LIMIT %s OFFSET %s;"
+            else:
+                query = f"{base_query} WHERE EXISTS (SELECT 1 FROM annotations a WHERE a.image_id = i.id) ORDER BY i.created_at {sort_order.upper()} LIMIT %s OFFSET %s;"
             cur.execute(query, (per_page, offset))
             images = process_media_rows(cur.fetchall())
         return jsonify(images)
@@ -505,7 +652,6 @@ def get_data_by_status():
         if conn: release_db_connection(conn)
 
 
-# --- Sisa Rute API & Streaming ---
 @app.route('/api/save_annotation', methods=['POST'])
 def save_annotation():
     conn = None
@@ -524,7 +670,6 @@ def save_annotation():
             {"status": "success", "message": "Anotasi berhasil disimpan!", "new_annotation": dict(new_annotation)})
     except Exception as e:
         if conn: conn.rollback()
-        print(f"Error saving annotation: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
     finally:
         if conn: release_db_connection(conn)
@@ -544,7 +689,6 @@ def delete_annotation(annotation_id):
         return jsonify({"status": "success", "message": "Anotasi berhasil dihapus."})
     except Exception as e:
         if conn: conn.rollback()
-        print(f"Error saat menghapus anotasi {annotation_id}: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
     finally:
         if conn: release_db_connection(conn)
@@ -563,36 +707,41 @@ def delete_all_annotations_for_image(image_id):
             {"status": "success", "message": f"Berhasil menghapus {deleted_count} anotasi untuk gambar ID {image_id}."})
     except Exception as e:
         if conn: conn.rollback()
-        print(f"Error saat menghapus semua anotasi untuk gambar {image_id}: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
     finally:
         if conn: release_db_connection(conn)
 
 
-# [MODIFIKASI] API delete sekarang menangani video
 @app.route('/api/delete_media/<string:media_type>/<int:media_id>', methods=['DELETE'])
 def delete_media(media_type, media_id):
     conn = None
     try:
         conn = get_db_connection()
         with conn.cursor() as cur:
+            table_map = {
+                'image': 'captured_images', 'video': 'recorded_videos',
+                'image_annotated': 'captured_images_annotated',
+                'video_annotated': 'recorded_videos_annotated'
+            }
+            table_name = table_map.get(media_type)
+            if not table_name:
+                return jsonify({"status": "error", "message": "Tipe media tidak valid"}), 400
+
+            cur.execute(f"SELECT file_path FROM {table_name} WHERE id = %s", (media_id,))
+            row = cur.fetchone()
+            if row and row[0] and os.path.exists(row[0]):
+                os.remove(row[0])
+                logging.info(f"File fisik '{row[0]}' telah dihapus.")
+
             if media_type == 'image':
                 cur.execute("DELETE FROM annotations WHERE image_id = %s", (media_id,))
-                cur.execute("DELETE FROM captured_images WHERE id = %s", (media_id,))
-            elif media_type == 'video':
-                cur.execute("SELECT file_path FROM recorded_videos WHERE id = %s", (media_id,))
-                row = cur.fetchone()
-                if row and row[0] and os.path.exists(row[0]):
-                    os.remove(row[0])
-                    logging.info(f"File video fisik '{row[0]}' telah dihapus.")
-                cur.execute("DELETE FROM recorded_videos WHERE id = %s", (media_id,))
-            else:
-                return jsonify({"status": "error", "message": "Tipe media tidak valid"}), 400
+                cur.execute("DELETE FROM captured_images_annotated WHERE original_image_id = %s", (media_id,))
+
+            cur.execute(f"DELETE FROM {table_name} WHERE id = %s", (media_id,))
 
             if cur.rowcount == 0:
                 conn.rollback()
                 return jsonify({"status": "error", "message": "Media tidak ditemukan"}), 404
-
         conn.commit()
         return jsonify({"status": "success", "message": f"{media_type.capitalize()} ID {media_id} berhasil dihapus."})
     except Exception as e:
@@ -607,33 +756,41 @@ def delete_media_bulk():
     conn = None
     try:
         data = request.get_json()
-        media_type = data.get('media_type')
-        ids_to_delete = data.get('ids')
+        media_type, ids_to_delete = data.get('media_type'), data.get('ids')
         if not all([media_type, isinstance(ids_to_delete, list)]): return jsonify(
             {"status": "error", "message": "Payload tidak lengkap atau format salah."}), 400
         if not ids_to_delete: return jsonify(
             {"status": "success", "message": "Tidak ada item yang dipilih untuk dihapus."})
+
         conn = get_db_connection()
         with conn.cursor() as cur:
+            id_tuple = tuple(ids_to_delete)
+            table_map = {
+                'image': 'captured_images', 'video': 'recorded_videos',
+                'image_annotated': 'captured_images_annotated',
+                'video_annotated': 'recorded_videos_annotated'
+            }
+            table_name = table_map.get(media_type)
+
+            if not table_name:
+                return jsonify({"status": "error", "message": "Tipe media tidak valid"}), 400
+
+            cur.execute(f"SELECT file_path FROM {table_name} WHERE id IN %s", (id_tuple,))
+            for row in cur.fetchall():
+                if row and row[0] and os.path.exists(row[0]):
+                    os.remove(row[0])
+
             if media_type == 'image':
-                id_tuple = tuple(ids_to_delete)
                 cur.execute("DELETE FROM annotations WHERE image_id IN %s", (id_tuple,))
-                cur.execute("DELETE FROM captured_images WHERE id IN %s", (id_tuple,))
-            elif media_type == 'video':
-                id_tuple = tuple(ids_to_delete)
-                cur.execute("SELECT file_path FROM recorded_videos WHERE id IN %s", (id_tuple,))
-                for row in cur.fetchall():
-                    if row and row[0] and os.path.exists(row[0]):
-                        os.remove(row[0])
-                cur.execute("DELETE FROM recorded_videos WHERE id IN %s", (id_tuple,))
-            else:
-                return jsonify({"status": "error", "message": "Tipe media tidak valid untuk hapus massal"}), 400
+                cur.execute("DELETE FROM captured_images_annotated WHERE original_image_id IN %s", (id_tuple,))
+
+            cur.execute(f"DELETE FROM {table_name} WHERE id IN %s", (id_tuple,))
             deleted_count = cur.rowcount
+
         conn.commit()
-        return jsonify({"status": "success", "message": f"{deleted_count} {media_type} berhasil dihapus."})
+        return jsonify({"status": "success", "message": f"{deleted_count} {media_type.replace('_', ' ')} berhasil dihapus."})
     except Exception as e:
         if conn: conn.rollback()
-        print(f"Error saat menghapus massal: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
     finally:
         if conn: release_db_connection(conn)
@@ -642,14 +799,8 @@ def delete_media_bulk():
 def run_training_in_thread(yaml_path):
     try:
         command = [sys.executable, '-u', 'run_training.py', yaml_path]
-        process = subprocess.Popen(
-            command,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            encoding='utf-8',
-            errors='replace'
-        )
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                                   encoding='utf-8', errors='replace')
         for line in iter(process.stdout.readline, ''):
             training_log_queue.put(line)
         process.stdout.close()
@@ -668,13 +819,14 @@ def run_training_in_thread(yaml_path):
 def start_training():
     if 'training_thread' in app.config and app.config['training_thread'].is_alive():
         return jsonify({"status": "error", "message": "Proses pelatihan lain sudah berjalan."}), 409
+
     success, message_or_path = export_data_for_yolo()
     if not success:
         return jsonify({"status": "error", "message": f"Gagal mengekspor data: {message_or_path}"}), 500
+
     try:
         yaml_path = os.path.abspath(message_or_path)
-        while not training_log_queue.empty():
-            training_log_queue.get()
+        while not training_log_queue.empty(): training_log_queue.get()
         thread = threading.Thread(target=run_training_in_thread, args=(yaml_path,))
         thread.daemon = True
         app.config['training_thread'] = thread
@@ -709,7 +861,9 @@ def video_feed():
         while True:
             frame = None
             with latest_frame_data["lock"]:
-                if latest_frame_data["frame"] is not None: frame = latest_frame_data["frame"].copy()
+                if latest_frame_data["frame"] is not None:
+                    frame = latest_frame_data["frame"].copy()
+
             if frame is None:
                 placeholder = np.zeros((480, 640, 3), dtype=np.uint8)
                 cv2.putText(placeholder, "Menunggu stream dari client...", (50, 240), cv2.FONT_HERSHEY_SIMPLEX, 1,
@@ -718,11 +872,12 @@ def video_feed():
                 yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + bytearray(encodedImage) + b'\r\n')
                 time.sleep(1)
                 continue
+
             if model:
-                results = model(frame, verbose=False)
-                annotated_frame = results[0].plot()
+                annotated_frame = model(frame, verbose=False)[0].plot()
             else:
                 annotated_frame = frame
+
             (flag, encodedImage) = cv2.imencode(".jpg", annotated_frame)
             if not flag: continue
             yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + bytearray(encodedImage) + b'\r\n')
@@ -746,20 +901,20 @@ def server_video_feed():
             while True:
                 yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + bytearray(encodedImage) + b'\r\n')
                 time.sleep(1)
+
         logging.info("SERVER CAM - Kamera server berhasil dibuka. Memulai streaming...")
         try:
             while True:
                 success, frame = cap.read()
-                if not success:
-                    logging.warning("SERVER CAM - Gagal membaca frame dari kamera. Menghentikan stream.")
-                    break
+                if not success: break
+
                 if model:
-                    results = model(frame, verbose=False)
-                    annotated_frame = results[0].plot()
+                    annotated_frame = model(frame, verbose=False)[0].plot()
                 else:
                     annotated_frame = frame
                     cv2.putText(annotated_frame, "Model tidak ditemukan", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7,
                                 (0, 0, 255), 2)
+
                 (flag, encodedImage) = cv2.imencode(".jpg", annotated_frame)
                 if not flag: continue
                 yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + bytearray(encodedImage) + b'\r\n')
@@ -770,11 +925,27 @@ def server_video_feed():
     return Response(generate_server_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 
-# [BARU] Rute untuk menyajikan file video dari direktori recordings
+@app.route('/videos_annotated/<path:filename>')
+def serve_annotated_video(filename):
+    """Menyajikan file video yang telah direkam dan diannotasi."""
+    return send_from_directory(RECORDINGS_ANNOTATED_DIR, filename)
+
+@app.route('/images_annotated/<path:filename>')
+def serve_annotated_image(filename):
+    """Menyajikan file gambar yang telah disimpan dan diannotasi."""
+    return send_from_directory(IMAGES_ANNOTATED_DIR, filename)
+
+
 @app.route('/videos/<path:filename>')
 def serve_video(filename):
-    """Menyajikan file video yang telah direkam."""
-    return send_from_directory(RECORDINGS_DIR, filename, as_attachment=False)
+    """Menyajikan file video mentah yang telah direkam."""
+    return send_from_directory(RECORDINGS_DIR, filename)
+
+
+@app.route('/images/<path:filename>')
+def serve_image(filename):
+    """Menyajikan file gambar mentah yang telah disimpan."""
+    return send_from_directory(IMAGES_DIR, filename)
 
 
 # --- ENTRY POINT ---
@@ -782,14 +953,13 @@ if __name__ == '__main__':
     print("=====================================================================")
     print("### PERINGATAN ###")
     print("Server ini adalah server pengembangan Flask dan TIDAK UNTUK PRODUKSI.")
-    print("Gunakan WSGI server seperti Gunicorn atau uWSGI untuk production.")
-    print("Contoh menjalankan dengan Gunicorn:")
-    print("gunicorn --workers 1 --threads 10 --bind 0.0.0.0:5000 app:app")
     print("=====================================================================")
 
     receiver_thread = threading.Thread(target=image_receiver_thread, daemon=True)
     receiver_thread.start()
 
+    processor_thread = threading.Thread(target=annotated_frame_processor_thread, daemon=True)
+    processor_thread.start()
+
     logging.info("Memulai server web Flask di http://0.0.0.0:5000")
-    # Catatan: use_reloader=False penting saat menggunakan state global/thread seperti ini.
     app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False)
