@@ -1,0 +1,125 @@
+{% extends "layout.html" %}
+
+{% block title %}Pembersihan & Anotasi Data{% endblock %}
+
+{% block head %}
+<style>
+    .tabs { display: flex; border-bottom: 2px solid var(--border-color); margin-bottom: 2rem; }
+    .tab-button { padding: 0.8rem 1.75rem; cursor: pointer; background-color: transparent; border: none; border-bottom: 3px solid transparent; font-size: 1.05rem; font-weight: 600; color: var(--text-muted); margin-bottom: -2px; }
+    .tab-button.active { color: var(--primary-color); border-bottom-color: var(--primary-color); }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; animation: fadeInUp 0.5s ease-out; }
+    .table-controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+    .sort-controls { display: flex; align-items: center; gap: 0.75rem; }
+    .preview-col img { width: 120px; height: 75px; object-fit: cover; border-radius: var(--border-radius); }
+    .checkbox-col { width: 5%; text-align: center; }
+    .action-buttons { display: flex; justify-content: center; gap: 0.75rem; }
+    .empty-state { text-align: center; padding: 4rem; color: var(--text-muted); font-size: 1.1rem; border: 2px dashed var(--border-color); border-radius: var(--border-radius-lg); }
+    .loader-row { text-align: center; padding: 2rem; }
+
+    /* === CSS Untuk Modal Dialog === */
+    .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.6); backdrop-filter: blur(4px); align-items: center; justify-content: center; }
+    .modal.hidden { display: none; }
+    .modal:not(.hidden) { display: flex; }
+    .modal-content-wrapper { background: var(--surface); border-radius: var(--border-radius-lg); padding: 2rem; max-width: 500px; width: 90%; box-shadow: var(--shadow-xl); border: 1px solid var(--border-color); animation: zoomIn 0.3s ease-out; }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+    .modal-header h3 { margin: 0; font-weight: 600; }
+    .modal-header .modal-title-danger { color: var(--danger-color); }
+    .modal-header .modal-title-success { color: #28a745; } /* Warna hijau untuk sukses */
+    .modal-header .modal-title-info { color: var(--text-muted); }
+    .close-button { font-size: 1.5rem; background: none; border: none; cursor: pointer; color: var(--text-muted); }
+    .modal-actions { display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem; }
+    
+    @keyframes zoomIn {
+        from { transform: scale(0.8); opacity: 0; }
+        to { transform: scale(1); opacity: 1; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1 class="page-header">Anotasi Data</h1>
+<p class="page-subheader">Kelola data gambar Anda. Hapus gambar yang tidak diperlukan, atau tinjau kembali data yang sudah dianotasi.</p>
+
+<div class="card animated-card">
+    <h2 class="card-header">Manajemen Data Gambar</h2>
+    <div class="table-controls">
+        <div class="sort-controls">
+            <label for="sort-order-select">URUTKAN:</label>
+            <select id="sort-order-select" class="sort-controls select">
+                <option value="desc">Terbaru</option>
+                <option value="asc">Terlama</option>
+            </select>
+        </div>
+    </div>
+    <div class="tabs">
+        <button class="tab-button active" data-tab="unannotated"><span>📝</span> Data Belum Dianotasi</button>
+        <button class="tab-button" data-tab="annotated"><span>✅</span> Data Sudah Dianotasi</button>
+    </div>
+    <div id="unannotated" class="tab-content active">
+        <div class="table-controls" style="justify-content: flex-end;">
+            <button class="btn btn-danger btn-delete-selected"><span>🗑️</span> Hapus Terpilih</button>
+        </div>
+        <div class="table-wrapper">
+            <table id="unannotated-table">
+                <thead>
+                    <tr>
+                        <th class="checkbox-col"><input type="checkbox" class="select-all-checkbox" data-table="unannotated-table"></th>
+                        <th>ID</th><th>Preview</th><th>Tanggal Unggah</th><th style="text-align: center;">Aksi</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+        <div id="unannotated-loader" class="loader-row" style="display: none;">Memuat...</div>
+    </div>
+    <div id="annotated" class="tab-content">
+        <div class="table-controls" style="justify-content: flex-end;">
+            <button class="btn btn-danger btn-delete-selected"><span>🗑️</span> Hapus Terpilih</button>
+        </div>
+        <div class="table-wrapper">
+            <table id="annotated-table">
+                <thead>
+                    <tr>
+                        <th class="checkbox-col"><input type="checkbox" class="select-all-checkbox" data-table="annotated-table"></th>
+                        <th>ID</th><th>Preview</th><th>Tanggal Unggah</th><th style="text-align: center;">Aksi</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+        <div id="annotated-loader" class="loader-row" style="display: none;">Memuat...</div>
+    </div>
+</div>
+
+<div class="modal hidden" id="deleteModal">
+    <div class="modal-content-wrapper">
+        <div class="modal-header">
+            <h3 class="modal-title-danger">⚠️ Konfirmasi Penghapusan</h3>
+            <button id="closeDeleteModal" class="close-button">&times;</button>
+        </div>
+        <p id="deleteMessage">Apakah Anda yakin? Aksi ini tidak bisa dibatalkan.</p>
+        <div class="modal-actions">
+            <button id="cancelDeleteBtn" class="btn btn-secondary">Batal</button>
+            <button id="confirmDeleteBtn" class="btn btn-danger">Hapus Permanen</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal hidden" id="infoModal">
+    <div class="modal-content-wrapper">
+        <div class="modal-header">
+            <h3 id="infoModalTitle">Informasi</h3>
+            <button id="closeInfoModal" class="close-button">&times;</button>
+        </div>
+        <p id="infoMessage">Ini adalah pesan informasi.</p>
+        <div class="modal-actions" style="justify-content: center;">
+            <button id="infoModalOkBtn" class="btn btn-primary">OK</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/data_cleaning.js') }}"></script>
+{% endblock %}

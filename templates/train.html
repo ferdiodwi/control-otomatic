@@ -1,0 +1,57 @@
+{% extends "layout.html" %}
+
+{% block title %}Pelatihan Model YOLOv8{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fira+Code&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+<style>
+    .training-card:hover { transform: none; box-shadow: var(--shadow-xl); border-color: var(--primary-color); }
+    .training-grid { display: grid; grid-template-columns: 1fr 2fr; gap: 2.5rem; align-items: flex-start; }
+    .training-controls p { font-size: 1rem; color: var(--text-muted); text-align: left; margin-bottom: 2rem; }
+    #start-train-btn { padding: 1rem 2rem; font-size: 1.1rem; width: 100%; gap: 0.75rem; }
+    #start-train-btn:not(:disabled) { animation: pulse 2s infinite; }
+    .console-wrapper { border-radius: var(--border-radius); background-color: var(--dark-gray); box-shadow: var(--shadow-lg); border: 1px solid #4a5568; }
+    .console-header { display: flex; align-items: center; padding: 0.75rem 1rem; background-color: #4a5568; border-bottom: 1px solid #2d3748; border-top-left-radius: var(--border-radius); border-top-right-radius: var(--border-radius); }
+    .console-dots { display: flex; gap: 0.5rem; }
+    .console-dots span { width: 12px; height: 12px; border-radius: 50%; }
+    .dot-red { background-color: #fc5c5c; } .dot-yellow { background-color: #fdbb40; } .dot-green { background-color: #34c749; }
+    #training-status { background-color: transparent; color: #e2e8f0; padding: 1.5rem; font-family: 'Fira Code', 'Courier New', monospace; white-space: pre-wrap; word-wrap: break-word; height: 400px; overflow-y: auto; font-size: 0.95rem; line-height: 1.7; position: relative; }
+    #training-status.waiting::after { content: '▋'; animation: blink 1s step-end infinite; color: var(--success-color); margin-left: 2px; }
+    @keyframes blink { from, to { opacity: 1; } 50% { opacity: 0; } }
+    .spinner { width: 20px; height: 20px; border: 3px solid rgba(255, 255, 255, 0.3); border-top-color: var(--white); border-radius: 50%; animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media (max-width: 992px) { .training-grid { grid-template-columns: 1fr; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1 class="page-header">Pelatihan Model</h1>
+<p class="page-subheader">Mulai, pantau, dan kelola proses pelatihan model YOLOv8 Anda dari satu tempat.</p>
+
+<div class="card training-card animated-card">
+    <div class="training-grid">
+        <div class="training-controls">
+            <h3 class="card-header">Kontrol Pelatihan</h3>
+            <p>Pastikan Anda sudah memiliki cukup data yang telah diunggah dan dianotasi dengan benar. Proses ini akan menggunakan semua data yang valid untuk melatih model baru.</p>
+            <p>Klik tombol di bawah ini untuk memulai. Proses mungkin memakan waktu yang cukup lama tergantung pada jumlah data dan spesifikasi server.</p>
+            <button id="start-train-btn" class="btn btn-success"><span>🧠</span> Mulai Pelatihan Model</button>
+        </div>
+        
+        <div class="training-output">
+            <h3 class="card-header">Status & Output Konsol</h3>
+            <div class="console-wrapper">
+                <div class="console-header">
+                    <div class="console-dots"><span class="dot-red"></span><span class="dot-yellow"></span><span class="dot-green"></span></div>
+                </div>
+                <pre id="training-status" class="waiting">Menunggu perintah pelatihan...</pre>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="{{ url_for('static', filename='js/train.js') }}"></script>
+{% endblock %}

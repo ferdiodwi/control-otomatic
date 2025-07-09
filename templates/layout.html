@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Aplikasi YOLOv8{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-container">
+            <div class="logo">
+                <span class="logo-icon">🤙🏻</span>
+                <span>Yoloooo</span>
+            </div>
+            <div class="nav-links">
+                <a href="{{ url_for('home') }}" class="{{ 'active' if request.endpoint == 'home' else '' }}">
+                    <span>🏠</span> Dasbor
+                </a>
+                <a href="{{ url_for('gallery') }}" class="{{ 'active' if request.endpoint == 'gallery' else '' }}">
+                    <span>🖼️</span> Galeri Media
+                </a>
+                <a href="{{ url_for('data_cleaning_page') }}" class="{{ 'active' if request.endpoint in ['data_cleaning_page', 'annotate'] else '' }}">
+                    <span>🏷️</span> Anotasi Data
+                </a>
+                <a href="{{ url_for('train_page') }}" class="{{ 'active' if request.endpoint == 'train_page' else '' }}">
+                    <span>🧠</span> Pelatihan Model
+                </a>
+                <a href="{{ url_for('live_inference_page') }}" class="{{ 'active' if request.endpoint == 'live_inference_page' else '' }}">
+                    <span>🚀</span> Implementasi AI
+                </a>
+            </div>
+        </div>
+    </nav>
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,83 @@
+{% extends "layout.html" %}
+
+{% block title %}Galeri Media{% endblock %}
+
+{% block head %}
+<style>
+    .gallery-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
+    .stat-card { background: var(--surface); backdrop-filter: blur(10px); border: 1px solid var(--border-color); border-radius: var(--border-radius); padding: 1.5rem; text-align: center; }
+    .stat-number { font-size: 2rem; font-weight: 800; background: var(--primary-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .stat-label { font-size: 0.875rem; color: var(--text-muted); text-transform: uppercase; }
+    .media-grid { display: grid; gap: 1.5rem; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+    .media-item { background: var(--surface); border: 1px solid var(--border-color); border-radius: var(--border-radius-lg); overflow: hidden; transition: var(--transition); box-shadow: var(--shadow); }
+    .media-item:hover { transform: translateY(-8px) scale(1.02); box-shadow: var(--shadow-xl); border-color: var(--primary-color); }
+    .media-preview { position: relative; width: 100%; height: 200px; background: var(--dark-gray); }
+    .media-preview img, .media-preview video { width: 100%; height: 100%; object-fit: cover; }
+    .media-type-badge { position: absolute; top: 0.75rem; right: 0.75rem; background: rgba(0, 0, 0, 0.8); color: white; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.75rem; font-weight: 600; }
+    .media-info { padding: 1.5rem; }
+    .media-filename { font-weight: 700; color: var(--text-color); margin-bottom: 0.5rem; }
+    .media-meta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; color: var(--text-muted); font-size: 0.875rem; }
+    .media-actions { display: flex; gap: 0.5rem; }
+    #loader { text-align: center; padding: 2rem; font-size: 1.2rem; color: var(--text-muted); width: 100%; grid-column: 1 / -1; }
+    .empty-state { text-align: center; padding: 4rem 2rem; background: var(--surface); border: 2px dashed var(--border-color); border-radius: var(--border-radius-lg); }
+    .empty-state-icon { font-size: 4rem; margin-bottom: 1rem; color: var(--text-muted); }
+    
+    /* === CSS Untuk Modal Dialog === */
+    .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.6); backdrop-filter: blur(4px); align-items: center; justify-content: center; }
+    .modal.hidden { display: none; }
+    .modal:not(.hidden) { display: flex; }
+    .modal-content-wrapper { background: var(--surface); border-radius: var(--border-radius-lg); padding: 2rem; max-width: 500px; width: 90%; box-shadow: var(--shadow-xl); border: 1px solid var(--border-color); animation: zoomIn 0.3s ease-out; }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+    .modal-header h3 { margin: 0; font-weight: 600; }
+    .modal-header .modal-title-danger { color: var(--danger-color); }
+    .modal-header .modal-title-success { color: #28a745; } /* Warna hijau untuk sukses */
+    .modal-header .modal-title-info { color: var(--text-muted); }
+    .close-button { font-size: 1.5rem; background: none; border: none; cursor: pointer; color: var(--text-muted); }
+    .modal-actions { display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem; }
+
+    @keyframes zoomIn {
+        from { transform: scale(0.8); opacity: 0; }
+        to { transform: scale(1); opacity: 1; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1 class="page-header">Galeri Media</h1>
+<p class="page-subheader">Koleksi semua gambar dan video yang telah diambil. Kelola media Anda dengan mudah.</p>
+
+<div class="media-grid" id="media-grid"></div>
+
+<div id="loader"><p>Memuat media...</p></div>
+
+<div class="modal hidden" id="deleteModal">
+    <div class="modal-content-wrapper">
+        <div class="modal-header">
+            <h3 class="modal-title-danger">⚠️ Konfirmasi Penghapusan</h3>
+            <button id="closeDeleteModal" class="close-button">&times;</button>
+        </div>
+        <p id="deleteMessage">Apakah Anda yakin?</p>
+        <div class="modal-actions">
+            <button id="cancelDeleteBtn" class="btn btn-secondary">Batal</button>
+            <button id="confirmDeleteBtn" class="btn btn-danger">Hapus Permanen</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal hidden" id="infoModal">
+    <div class="modal-content-wrapper">
+        <div class="modal-header">
+            <h3 id="infoModalTitle">Informasi</h3>
+            <button id="closeInfoModal" class="close-button">&times;</button>
+        </div>
+        <p id="infoMessage">Ini adalah pesan informasi.</p>
+        <div class="modal-actions" style="justify-content: center;">
+            <button id="infoModalOkBtn" class="btn btn-primary">OK</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/gallery.js') }}"></script>
+{% endblock %}

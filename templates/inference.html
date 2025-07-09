@@ -1,0 +1,68 @@
+{% extends "layout.html" %}
+
+{% block title %}Implementasi AI - Live{% endblock %}
+
+{% block head %}
+<style>
+    .inference-grid { display: grid; grid-template-columns: 2.5fr 1fr; gap: 2rem; align-items: flex-start; }
+    .video-wrapper { background-color: var(--dark-gray); border-radius: var(--border-radius-lg); box-shadow: var(--shadow-xl); border: 1px solid #4a5568; position: relative; }
+    .video-header { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1.25rem; background: linear-gradient(135deg, #334155, #2d3748); border-bottom: 1px solid #4a5568; border-top-left-radius: var(--border-radius-lg); border-top-right-radius: var(--border-radius-lg); }
+    .video-title { color: #e2e8f0; font-weight: 700; font-size: 1.1rem; }
+    .live-indicator { display: flex; align-items: center; gap: 0.5rem; color: var(--success-color); font-weight: 800; animation: pulse 1.5s infinite; }
+    .live-indicator::before { content: ''; width: 10px; height: 10px; background-color: var(--success-color); border-radius: 50%; box-shadow: 0 0 8px var(--success-color); }
+    #video-feed { display: block; width: 100%; height: auto; border-bottom-left-radius: var(--border-radius-lg); border-bottom-right-radius: var(--border-radius-lg); background: var(--dark-gray); }
+    .info-item { margin-bottom: 1.5rem; }
+    .info-item h4 { color: var(--text-color); font-weight: 700; margin-bottom: 0.5rem; }
+    @media (max-width: 1024px) { .inference-grid { grid-template-columns: 1fr; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1 class="page-header">Implementasi AI (Live Inference)</h1>
+<p class="page-subheader">Deteksi objek secara real-time dari kamera <strong>server</strong> menggunakan model YOLOv8 yang telah Anda latih.</p>
+
+<div class="inference-grid animated-content">
+    
+    <div class="video-wrapper">
+        <div class="video-header">
+            <span class="video-title">🎥 Live Server Camera Feed</span>
+            <span id="live-indicator" class="live-indicator">Live</span>
+        </div>
+        <img id="video-feed" src="{{ url_for('server_video_feed') }}" alt="Live Video Feed from Server" onerror="handleStreamError()">
+    </div>
+
+    <div class="card info-panel">
+        <h3 class="card-header">Informasi & Status</h3>
+        <div class="info-item">
+            <h4>Status Koneksi</h4>
+            <div id="connection-status" class="model-status ready">Terhubung ke Kamera Server</div>
+        </div>
+        <div class="info-item">
+            <h4>Model Aktif</h4>
+            <p style="color: var(--primary-color); font-weight: 600;">YOLOv8n-Custom</p>
+        </div>
+        <div class="info-item">
+            <h4>Deskripsi</h4>
+            <p style="color: var(--text-muted);">Tampilan ini menyajikan hasil deteksi objek dari kamera yang terpasang di server.</p>
+        </div>
+    </div>
+</div>
+
+<script>
+    function handleStreamError() {
+        const videoFeed = document.getElementById('video-feed');
+        const liveIndicator = document.getElementById('live-indicator');
+        const connectionStatus = document.getElementById('connection-status');
+        
+        videoFeed.style.filter = "grayscale(100%)";
+        liveIndicator.textContent = 'Offline';
+        liveIndicator.style.color = 'var(--danger-color)';
+        liveIndicator.style.animation = 'none';
+        liveIndicator.style.setProperty('--success-color', 'var(--danger-color)');
+        
+        connectionStatus.classList.remove('ready');
+        connectionStatus.classList.add('not-ready');
+        connectionStatus.textContent = 'Koneksi ke Kamera Gagal';
+    }
+</script>
+{% endblock %}

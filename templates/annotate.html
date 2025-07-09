@@ -1,0 +1,97 @@
+{% extends 'layout.html' %}
+
+{% block title %}Anotasi Gambar - ID {{ image_info.id }}{% endblock %}
+
+{% block head %}
+<style>
+    .annotation-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 2rem; align-items: flex-start; }
+    #canvas-container { position: relative; border: 2px solid var(--border-color); box-shadow: var(--shadow-lg); display: inline-block; border-radius: var(--border-radius); overflow: hidden; background-color: var(--dark-gray); }
+    #bg-image { display: block; max-width: 100%; height: auto; }
+    #image-canvas { position: absolute; top: 0; left: 0; cursor: crosshair; }
+    .annotation-nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 2px solid var(--border-color); }
+    .annotation-nav .nav-group { display: flex; gap: 0.75rem; }
+    .annotation-nav .btn.disabled { pointer-events: none; opacity: 0.5; }
+    #annotations-ul { list-style: none; padding: 0; margin-top: 1.5rem; max-height: 450px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: var(--border-radius); padding: 0.5rem; background-color: var(--light-gray); }
+    .annotation-item { background: var(--surface); margin-bottom: 0.75rem; padding: 0.75rem 1rem; border-radius: var(--border-radius); border: 1px solid var(--border-color); font-size: 0.9em; display: flex; justify-content: space-between; align-items: center; }
+    #status-msg { font-weight: 600; margin-top: 1rem; padding: 0.75rem; border-radius: var(--border-radius); text-align: center; opacity: 0; transition: opacity 0.3s ease; }
+    #status-msg.visible { opacity: 1; }
+    #status-msg.success { background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(52, 211, 153, 0.1)); color: var(--success-color); }
+    #status-msg.error { background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(248, 113, 113, 0.1)); color: var(--danger-color); }
+    
+    /* === CSS Untuk Modal Dialog === */
+    .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.6); backdrop-filter: blur(4px); align-items: center; justify-content: center; }
+    .modal.hidden { display: none; }
+    .modal:not(.hidden) { display: flex; }
+    .modal-content-wrapper { background: var(--surface); border-radius: var(--border-radius-lg); padding: 2rem; max-width: 500px; width: 90%; box-shadow: var(--shadow-xl); border: 1px solid var(--border-color); animation: zoomIn 0.3s ease-out; }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+    .modal-header h3 { margin: 0; font-weight: 600; }
+    .modal-header .modal-title-danger { color: var(--danger-color); }
+    .close-button { font-size: 1.5rem; background: none; border: none; cursor: pointer; color: var(--text-muted); }
+    .modal-actions { display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem; }
+    
+    @keyframes zoomIn { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    @media (max-width: 992px) { .annotation-grid { grid-template-columns: 1fr; } }
+</style>
+{% endblock %}
+
+{% block content %}
+    <h1 class="page-header">Anotasi Gambar</h1>
+    <p class="page-subheader">Gambar ID: #{{ image_info.id }}. Konteks: <strong>{{ context }}</strong>. Klik dan seret pada gambar untuk membuat Bounding Box.</p>
+    
+    <div class="annotation-nav">
+        <a href="{{ url_for('data_cleaning_page') }}" class="btn btn-secondary"><span>↩️</span> Kembali ke Daftar</a>
+        <div class="nav-group">
+            <a href="{{ url_for('annotate', image_id=prev_id, context=context) if prev_id else '#' }}" class="btn btn-primary {{ 'disabled' if not prev_id }}"><span>⬅️</span> Sebelumnya</a>
+            <a href="{{ url_for('annotate', image_id=next_id, context=context) if next_id else '#' }}" class="btn btn-primary {{ 'disabled' if not next_id }}">Selanjutnya <span>➡️</span></a>
+        </div>
+    </div>
+
+    <div class="annotation-grid">
+        <div class="card">
+            <h2 class="card-header">Area Kerja Anotasi</h2>
+            <div id="canvas-container">
+                <img id="bg-image" src="data:image/jpeg;base64,{{ image_data_b64 }}" alt="Image for annotation">
+                <canvas id="image-canvas"></canvas>
+            </div>
+        </div>
+        <div class="card">
+            <h2 class="card-header">Alat & Daftar Anotasi</h2>
+            <div class="form-group" style="margin-bottom: 1.5rem;">
+                <label for="class-id" style="font-weight: 600; display: block; margin-bottom: 0.5rem;">Class ID</label>
+                <input type="number" id="class-id" value="0" min="0" class="input">
+            </div>
+            <div style="display: grid; gap: 1rem;">
+                <button id="save-btn" class="btn btn-success"><span>💾</span> Simpan Anotasi</button>
+                <button id="delete-all-btn" class="btn btn-danger"><span>🗑️</span> Hapus Semua</button>
+            </div>
+            <p id="status-msg"></p>
+            <div class="annotations-list-container" style="margin-top: 2rem;">
+                <h4 style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.5rem;">Anotasi Saat Ini:</h4>
+                <ul id="annotations-ul"></ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal hidden" id="confirmModal">
+        <div class="modal-content-wrapper">
+            <div class="modal-header">
+                <h3 class="modal-title-danger">⚠️ Konfirmasi Penghapusan</h3>
+                <button id="closeConfirmModal" class="close-button">&times;</button>
+            </div>
+            <p id="confirmMessage">Apakah Anda yakin?</p>
+            <div class="modal-actions">
+                <button id="confirmModalNoBtn" class="btn btn-secondary">Batal</button>
+                <button id="confirmModalYesBtn" class="btn btn-danger">Ya, Lanjutkan</button>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Pass data from Flask to the external JavaScript file
+    window.IMAGE_ID = {{ image_info.id }};
+    window.EXISTING_ANNOTATIONS = {{ annotations|tojson|safe }};
+</script>
+<script src="{{ url_for('static', filename='js/annotate.js') }}"></script>
+{% endblock %}

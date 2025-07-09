@@ -1,0 +1,145 @@
+{% extends "layout.html" %}
+
+{% block title %}Dasbor Aplikasi YOLOv8{% endblock %}
+
+{% block head %}
+<style>
+    /* Welcome section */
+    .dashboard-welcome { background: linear-gradient(135deg, rgba(56, 189, 248, 0.1) 0%, rgba(14, 165, 233, 0.1) 100%); border: 2px solid var(--primary-color); border-radius: var(--border-radius-lg); padding: 2.5rem; margin-bottom: 3rem; text-align: center; position: relative; overflow: hidden; backdrop-filter: blur(10px); animation: fadeInUp 0.8s ease-out; }
+    .dashboard-welcome::before { content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: radial-gradient(circle, rgba(56, 189, 248, 0.05) 0%, transparent 70%); animation: rotate 20s linear infinite; }
+    @keyframes rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .dashboard-welcome-content { position: relative; z-index: 2; }
+    .welcome-title { font-size: 2.5rem; font-weight: 800; background: var(--primary-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: 1rem; animation: slideInDown 0.8s ease-out 0.2s both; }
+    .welcome-subtitle { font-size: 1.2rem; color: var(--text-muted); margin-bottom: 1.5rem; animation: slideInUp 0.8s ease-out 0.4s both; }
+    .welcome-stats { display: flex; justify-content: center; gap: 3rem; margin-top: 1.5rem; animation: fadeIn 0.8s ease-out 0.6s both; }
+    .welcome-stat { text-align: center; }
+    .welcome-stat-number { font-size: 2rem; font-weight: 800; background: var(--primary-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; display: block; }
+    .welcome-stat-label { font-size: 0.9rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.5rem; }
+    .livestream-card { grid-column: 1 / -1; min-height: 480px; }
+    .livestream-container { width: 100%; background-color: #000; border-radius: var(--border-radius); overflow: hidden; margin-top: 1.5rem; border: 2px solid var(--border-color); box-shadow: var(--shadow-lg); }
+    .livestream-container img { width: 100%; height: auto; display: block; }
+    .dashboard-card { background: var(--surface); backdrop-filter: blur(15px); border: 1px solid var(--border-color); border-radius: var(--border-radius-lg); padding: 2.5rem; box-shadow: var(--shadow-lg); transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); position: relative; overflow: hidden; display: flex; flex-direction: column; min-height: 420px; }
+    .dashboard-card:hover { transform: translateY(-8px) scale(1.02); box-shadow: var(--shadow-xl); border-color: var(--primary-color); }
+    .card-header-enhanced { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 2px solid var(--border-color); position: relative; }
+    .card-header-enhanced::after { content: ''; position: absolute; bottom: -2px; left: 0; width: 80px; height: 2px; background: var(--primary-gradient); border-radius: 2px; }
+    .card-icon { width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.8rem; color: white; flex-shrink: 0; }
+    .card-icon.livestream { background: linear-gradient(135deg, #f97316 0%, #ef4444 100%); }
+    .card-icon.data-collection { background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); }
+    .card-icon.annotation { background: linear-gradient(135deg, #ec4899 0%, #f43f5e 100%); }
+    .card-icon.training { background: linear-gradient(135deg, #3b82f6 0%, #06b6d4 100%); }
+    .card-icon.deployment { background: linear-gradient(135deg, #10b981 0%, #14b8a6 100%); }
+    .card-title-enhanced { flex-grow: 1; }
+    .card-title-main { font-size: 1.4rem; font-weight: 800; color: var(--text-color); margin: 0; }
+    .stats-container-enhanced { background: var(--light-gray); border: 1px solid var(--border-color); border-radius: var(--border-radius); padding: 2rem; margin: 1.5rem 0; }
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 1.5rem; text-align: center; }
+    .stats-main-enhanced { font-size: 2.8rem; font-weight: 800; background: var(--primary-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .stats-label-enhanced { font-size: 0.9rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; }
+    .stats-warning { color: var(--warning-color) !important; }
+    .stats-success { color: var(--success-color) !important; }
+    .card-content-enhanced { flex-grow: 1; color: var(--text-muted); font-size: 1rem; line-height: 1.7; margin-bottom: 2rem; }
+    .card-action-enhanced { margin-top: auto; }
+    .btn-enhanced { width: 100%; padding: 1rem 1.5rem; font-size: 1.1rem; font-weight: 700; }
+    .model-status-enhanced { padding: 1rem 1.5rem; border-radius: var(--border-radius); font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 0.75rem; margin-bottom: 1.5rem; font-size: 1rem; }
+    .status-ready { background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(52, 211, 153, 0.15) 100%); color: var(--success-color); }
+    .status-not-ready { background: linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(248, 113, 113, 0.15) 100%); color: var(--danger-color); }
+    .large-icon-display { text-align: center; font-size: 4rem; margin: 1.5rem 0; }
+    @media (max-width: 768px) { .welcome-stats { flex-direction: column; gap: 1.5rem; } .dashboard-grid { grid-template-columns: 1fr; } .welcome-title { font-size: 2rem; } .stats-grid { grid-template-columns: repeat(2, 1fr); } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-welcome">
+    <div class="dashboard-welcome-content">
+        <h1 class="welcome-title">🚀 Selamat Datang di YOLOv8 Dashboard</h1>
+        <p class="welcome-subtitle">Platform lengkap untuk mengembangkan model deteksi objek dengan teknologi AI terdepan</p>
+        
+        <div class="welcome-stats">
+            <div class="welcome-stat">
+                <span class="welcome-stat-number">{{ stats.total_images + stats.total_videos }}</span>
+                <span class="welcome-stat-label">Total Media</span>
+            </div>
+            <div class="welcome-stat">
+                <span class="welcome-stat-number">{{ stats.annotated_images }}</span>
+                <span class="welcome-stat-label">Telah Dianotasi</span>
+            </div>
+            <div class="welcome-stat">
+                <span class="welcome-stat-number">{{ stats.progress }}%</span>
+                <span class="welcome-stat-label">Progress</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="dashboard-grid">
+    <div class="dashboard-card livestream-card">
+        <div class="card-header-enhanced">
+            <div class="card-icon livestream"><span>📹</span></div>
+            <div class="card-title-enhanced"><h3 class="card-title-main">Livestream CCTV - Real-Time Inference</h3></div>
+        </div>
+        <p class="card-content-enhanced" style="margin-bottom: 0.5rem; text-align: center;">
+            Tampilan langsung dari kamera dengan deteksi objek menggunakan model yang telah dilatih.
+            {% if not stats.model_exists %}
+                <strong style="color: var(--warning-color);">Model belum dilatih, frame tidak akan menampilkan deteksi.</strong>
+            {% endif %}
+        </p>
+        <div class="livestream-container">
+            <img src="{{ url_for('video_feed') }}" alt="Livestream dari CCTV" />
+        </div>
+    </div>
+
+    <div class="dashboard-card">
+        <div class="card-header-enhanced">
+            <div class="card-icon data-collection"><span>📊</span></div>
+            <div class="card-title-enhanced"><h3 class="card-title-main">Pengumpulan Data</h3></div>
+        </div>
+        <div class="stats-container-enhanced">
+            <div class="stats-grid">
+                <div class="stat-item"><div class="stats-main-enhanced">{{ stats.total_images }}</div><div class="stats-label-enhanced">Gambar</div></div>
+                <div class="stat-item"><div class="stats-main-enhanced">{{ stats.total_videos }}</div><div class="stats-label-enhanced">Video</div></div>
+            </div>
+        </div>
+        <p class="card-content-enhanced">Kelola semua media yang telah dikumpulkan untuk pelatihan model.</p>
+        <div class="card-action-enhanced"><a href="{{ url_for('gallery') }}" class="btn btn-primary btn-enhanced">Buka Galeri Media</a></div>
+    </div>
+
+    <div class="dashboard-card">
+        <div class="card-header-enhanced">
+            <div class="card-icon annotation"><span>🏷️</span></div>
+            <div class="card-title-enhanced"><h3 class="card-title-main">Anotasi Data</h3></div>
+        </div>
+        <div class="stats-container-enhanced">
+            <div class="stats-grid">
+                <div class="stat-item"><div class="stats-main-enhanced stats-success">{{ stats.annotated_images }}</div><div class="stats-label-enhanced">Selesai</div></div>
+                <div class="stat-item"><div class="stats-main-enhanced stats-warning">{{ stats.unannotated_images }}</div><div class="stats-label-enhanced">Tertunda</div></div>
+            </div>
+        </div>
+        <p class="card-content-enhanced">Lakukan anotasi presisi pada gambar untuk hasil optimal.</p>
+        <div class="card-action-enhanced"><a href="{{ url_for('data_cleaning_page') }}" class="btn btn-secondary btn-enhanced">Mulai Anotasi</a></div>
+    </div>
+
+    <div class="dashboard-card">
+        <div class="card-header-enhanced">
+            <div class="card-icon training"><span>🧠</span></div>
+            <div class="card-title-enhanced"><h3 class="card-title-main">Pelatihan Model</h3></div>
+        </div>
+        <div class="large-icon-display">🚀</div>
+        <p class="card-content-enhanced">Dengan data yang disiapkan, hasilkan model deteksi kustom yang powerful.</p>
+        <div class="card-action-enhanced"><a href="{{ url_for('train_page') }}" class="btn btn-success btn-enhanced">Latih Model Sekarang</a></div>
+    </div>
+
+    <div class="dashboard-card">
+        <div class="card-header-enhanced">
+            <div class="card-icon deployment"><span>⚡</span></div>
+            <div class="card-title-enhanced"><h3 class="card-title-main">Implementasi AI</h3></div>
+        </div>
+        {% if stats.model_exists %}
+            <div class="model-status-enhanced status-ready"><span>✅ Model Siap Digunakan</span></div>
+        {% else %}
+            <div class="model-status-enhanced status-not-ready"><span>⏳ Model Belum Dilatih</span></div>
+        {% endif %}
+        <div class="large-icon-display" style="color: var(--success-color);">🎯</div>
+        <p class="card-content-enhanced">Uji coba model dengan deteksi objek real-time di halaman terpisah.</p>
+        <div class="card-action-enhanced"><a href="{{ url_for('live_inference_page') }}" class="btn btn-primary btn-enhanced">Coba Deteksi Live</a></div>
+    </div>
+</div>
+{% endblock %}
